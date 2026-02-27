@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ToDo App</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}">
+</head>
+
+<body class="container">
+
+<div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModal" aria-modal="true" role="dialog"
+     style="display: none;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="exampleModalTitle">Вы уверены?</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Нет</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', path='js/modal.js') }}"></script>
+
+<main class="d-flex flex-column gap-3">
+    <h1 class="h1"><a href="/todo/home/" style="cursor: pointer; color: black; text-decoration: none;">ToDo</a> - список
+        задач</h1>
+
+    {% block content %}
+
+    {% endblock content %}
+</main>
+
+<footer>
+    <nav class="navbar navbar-expand">
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <li class="nav-item">
+                <a class="nav-link small" href="/todo/home/">Главная</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link small" href="/todo/list/">Список дел</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link small" href="/todo/export/">Импорт и экспорт</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link small" href="/todo/visualize/">Визуализация</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link small" href="/todo/generate/">Генерация</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link small" href="/todo/import-log/">Импортированные Excel-файлы</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link small" href="/todo/import-issues/">Импорт issue</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link small" href="/todo/java-app/">Java приложение</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link small" href="/todo/info-tasks/">Информация</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link small" href="/auth/logout">Выйти</a>
+            </li>
+        </ul>
+    </nav>
+</footer>
+</body>
+</html>

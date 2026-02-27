@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:latest
+    container_name: db
+    env_file:
+      - .env
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_8:/var/lib/postgresql/data
+
+  web:
+    build:
+      context: .
+    container_name: app
+    command: ["/code/docker_scripts/app.sh"]
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - ./app:/code/app
+      - ./data:/code/data
+      - ./scripts:/code/scripts
+      - ./images:/code/images
+      - ./files:/code/files
+volumes:
+  postgres_data_8:

@@ -1,0 +1,248 @@
+{
+	"info": {
+		"_postman_id": "bd7e1eec-a7c6-4b9a-86f9-aa5c18196f6a",
+		"name": "Todo collection",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "38847272"
+	},
+	"item": [
+		{
+			"name": "Get home",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{BASE_URL}}todo/home/",
+					"host": [
+						"{{BASE_URL}}todo"
+					],
+					"path": [
+						"home",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get no such page home",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{BASE_URL}}todo/home/?limit=10&skip=100",
+					"host": [
+						"{{BASE_URL}}todo"
+					],
+					"path": [
+						"home",
+						""
+					],
+					"query": [
+						{
+							"key": "limit",
+							"value": "10"
+						},
+						{
+							"key": "skip",
+							"value": "100"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Add todo",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"completed\": false,\n  \"details\": \"Описание задачи\",\n  \"tags\": \"планы\",\n  \"title\": \"Задача\"\n}"
+				},
+				"url": {
+					"raw": "{{BASE_URL}}todo/add/",
+					"host": [
+						"{{BASE_URL}}todo"
+					],
+					"path": [
+						"add",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get edit todo by id",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{BASE_URL}}todo/edit/6/",
+					"host": [
+						"{{BASE_URL}}todo"
+					],
+					"path": [
+						"edit",
+						"6",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get not found todo by id",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{BASE_URL}}todo/edit/1000/",
+					"host": [
+						"{{BASE_URL}}todo"
+					],
+					"path": [
+						"edit",
+						"1000",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Edit todo by id",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"completed\": false,\n  \"details\": \"Описание задачи\",\n  \"tag\": \"планы\",\n  \"title\": \"Задача 22\"\n}"
+				},
+				"url": {
+					"raw": "{{BASE_URL}}todo/edit/6/",
+					"host": [
+						"{{BASE_URL}}todo"
+					],
+					"path": [
+						"edit",
+						"6",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Edit not found todo by id",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"completed\": false,\n  \"details\": \"Описание задачи\",\n  \"tag\": \"планы\",\n  \"title\": \"Задача 22\"\n}"
+				},
+				"url": {
+					"raw": "{{BASE_URL}}todo/edit/1000/",
+					"host": [
+						"{{BASE_URL}}todo"
+					],
+					"path": [
+						"edit",
+						"1000",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete todo by id",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{BASE_URL}}todo/delete/6/",
+					"host": [
+						"{{BASE_URL}}todo"
+					],
+					"path": [
+						"delete",
+						"6",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete not found todo by id",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{BASE_URL}}todo/delete/1000/",
+					"host": [
+						"{{BASE_URL}}todo"
+					],
+					"path": [
+						"delete",
+						"1000",
+						""
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

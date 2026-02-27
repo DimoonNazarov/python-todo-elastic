@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<form id="todoForm" class="d-flex flex-column gap-2">
+    <h2 class="h2">Редактирование задачи</h2>
+
+    <div class="form-floating">
+        <input minlength="3" maxlength="200" type="text" class="form-control" id="title" name="title"
+               placeholder="Введите название задачи" required value="{{todo.title}}">
+        <label for="title">Введите название задачи</label>
+    </div>
+    <div class="form-floating">
+        <textarea class="form-control" maxlength="500" placeholder="Введите описание задачи" name="details" id="details"
+                  style="height: 100px">{{todo.details}}</textarea>
+        <label for="details">Введите описание задачи</label>
+    </div>
+
+    <div class="form-check form-switch">
+        <label class="form-check-label" for="flexSwitchCheckChecked">Выполнено</label>
+        <input {% if todo.completed %}checked{% endif %} class="form-check-input" type="checkbox"
+               id="flexSwitchCheckChecked" name="completed" >
+    </div>
+
+    <div class="form-floating">
+        <select class="form-select" name="tag" id="tag" aria-label="Floating label select example">
+            {% for tag in tags %}
+            <option {% if todo.tag==tag.value %}selected{% endif %}
+                    value="{{ tag.value }}">{{ tag.value }}
+            </option>
+            {% endfor %}
+        </select>
+        <label for="tag">Тип задачи:</label>
+    </div>
+
+    <div class="form-group">
+        <label for="created_at">Дата создания:</label>
+        <input type="text" class="form-control" id="created_at" name="created_at"
+               value="{{ todo.created_at.strftime('%Y-%m-%d %H:%M') }}" readonly>
+    </div>
+
+    <div class="form-group">
+        <label for="due_date">Дата выполнения:</label>
+        <input type="text" class="form-control" id="due_date" name="due_date"
+               value="{{ todo.completed_at.strftime('%Y-%m-%d %H:%M') if todo.completed_at else '' }}"
+               readonly>
+    </div>
+
+    <div class="form-group">
+        <label for="image">Выберите изображение:</label>
+        <input type="file" class="form-control" id="image" name="image" accept="image/*">
+        {% if todo.image_path  %}
+        <img src="{{ url_for('images', path=todo.image_path) }}" style="max-width: 100%; margin-top: 10px;" alt="todo">
+        {% endif %}
+    </div>
+
+    <div class="form-group">
+        <label for="existing_image">Выберите из существующих изображений:</label>
+        <select class="form-select" name="existing_image" id="existing_image">
+            <option value="">Выберите изображение</option>
+            {% for image_path in images %}
+            <option value="{{ image_path }}" {% if todo.image_path == image_path %}selected{% endif %}>{{ image_path }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <button type="submit" class="btn btn-success" data-todo-image="{{ todo.image_path }}">Сохранить</button>
+</form>
+
+<div class="mt-3">
+    <h4>Перейти к задачам типа:</h4>
+    <a href="/todo/list/?tag=Учёба" class="btn btn-outline-primary me-2">Учёба</a>
+    <a href="/todo/list/?tag=Личное" class="btn btn-outline-primary me-2">Личное</a>
+    <a href="/todo/list/?tag=Планы" class="btn btn-outline-primary me-2">Планы</a>
+</div>
+
+<script>
+    document.getElementById('todoForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+        fetch('/todo/edit/{{ todo.id }}/', {
+            method: 'PUT',
+            body: formData
+        })
+                .then(res => res.json())
+                .then(data => {
+                    console.log('Успешно:', data);
+                    window.location.href = '/todo/list/?limit={{ limit }}&skip={{ skip }}';
+                })
+                .catch(error => console.error('Ошибка:', error));
+
+        this.reset();
+    });
+</script>
+{% endblock content %}

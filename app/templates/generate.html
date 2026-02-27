@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<form id="todoForm" class="d-flex flex-column gap-2">
+    <div class="form-floating">
+        <input type="number" class="form-control" id="count" name="count"
+               placeholder="Введите количество todo" required min="1" max="200">
+        <label for="count">Введите количество todo</label>
+    </div>
+
+
+    <button type="submit" class="btn btn-success">Сгенерировать</button>
+</form>
+<script>
+    document.getElementById('todoForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+
+        fetch('/todo/generate/', {
+            method: 'POST',
+            body: formData
+        })
+                .then(res => res.json())
+                .then(data => {
+                    console.log('Успешно:', data);
+                    window.location.href = '/todo/home/';
+                })
+                .catch(error => console.error('Ошибка:', error));
+
+        this.reset();
+    });
+</script>
+{% endblock content %}

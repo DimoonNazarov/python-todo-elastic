@@ -1,0 +1,380 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h2 class="h2">Задачи</h2>
+
+<div class="accordion" id="accordionFilters">
+    <div class="accordion-item">
+        <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapseOne"
+                    aria-expanded="false" aria-controls="collapseOne">
+                Фильтры
+            </button>
+        </h2>
+        <div id="collapseOne" class="accordion-collapse collapse" data-bs-parent="#accordionFilters">
+            <div class="accordion-body">
+                <form id="formFilters">
+                    <div class="mb-3">
+                        <span class="form-label">Дата создания</span>
+                        <div class="input-group input-group-sm flex-nowrap mb-1">
+                            <span class="input-group-text" id="addon-wrapping">От</span>
+                            <input type="date" name="creation_date_start" class="form-control" placeholder=""
+                                   aria-label="" aria-describedby="addon-wrapping">
+                        </div>
+                        <div class="input-group input-group-sm flex-nowrap">
+                            <span class="input-group-text" id="addon-wrapping">До</span>
+                            <input type="date" name="creation_date_end" class="form-control" placeholder=""
+                                   aria-label="" aria-describedby="addon-wrapping">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <span class="form-label">Количество задач</span>
+                        <input type="number" name="limit" class="form-control" placeholder="Введите количество задач" min="1" aria-label="Количество задач">
+                    </div>
+
+                    <div class="mb-3">
+                        <span class="form-label">Тег</span>
+                        <select class="form-select form-select-sm" name="tag">
+                            <option value="" selected>Любой</option>
+                            <option value="Учёба">Учёба</option>
+                            <option value="Личное">Личное</option>
+                            <option value="Планы">Планы</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Поиск</button>
+                    <button type="button" class="btn btn-secondary" id="resetFilters">Сбросить фильтры</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const accardion = document.querySelector("#accordionFilters");
+    accardion.querySelector("button.accordion-button").addEventListener("click", (e) => {
+        e.currentTarget.classList.toggle("collapsed");
+        document.querySelector(`${e.currentTarget.dataset.bsTarget}`).classList.toggle("show");
+    });
+
+    const form = document.querySelector("#formFilters");
+
+    const restoreFilters = () => {
+        const creationDateStart = localStorage.getItem('creation_date_start');
+        const creationDateEnd = localStorage.getItem('creation_date_end');
+        const tag = localStorage.getItem('tag');
+        const limit = localStorage.getItem('limit')
+
+        if (creationDateStart) {
+            form.querySelector("input[name='creation_date_start']").value = creationDateStart;
+        }
+        if (creationDateEnd) {
+            form.querySelector("input[name='creation_date_end']").value = creationDateEnd;
+        }
+        if (tag) {
+            form.querySelector("select[name='tag']").value = tag;
+        }
+        if (limit) {
+            form.querySelector("input[name='limit']").value = limit;
+        }
+    };
+
+    const resetFilters = () => {
+        form.querySelectorAll("input.form-control").forEach((input) => {
+            input.value = '';
+            localStorage.removeItem(input.name);
+        });
+
+        const tagSelect = form.querySelector("select[name='tag']");
+        tagSelect.value = '';
+        localStorage.removeItem(tagSelect.name);
+
+        const params = new URLSearchParams(window.location.search);
+        params.delete('creation_date_start');
+        params.delete('creation_date_end');
+        params.delete('tag');
+        params.set('skip', '0');
+        params.set('limit', '10')
+
+        window.location.search = params.toString();
+    };
+
+    const handleFilterSubmit = (e) => {
+        e.preventDefault();
+        const params = new URLSearchParams(window.location.search);
+        params.set('skip', '0');
+        form.querySelectorAll("input.form-control").forEach((input) => {
+            if (input.value) {
+                params.set(input.name, input.value);
+                localStorage.setItem(input.name, input.value);
+            } else {
+                params.delete(input.name);
+                localStorage.removeItem(input.name);
+            }
+        });
+
+        const tagSelect = form.querySelector("select[name='tag']");
+        if (tagSelect.value) {
+            params.set(tagSelect.name, tagSelect.value);
+            localStorage.setItem(tagSelect.name, tagSelect.value);
+        } else {
+            params.delete(tagSelect.name);
+            localStorage.removeItem(tagSelect.name);
+        }
+
+        window.location.search = params.toString();
+    };
+
+    document.getElementById("resetFilters").addEventListener("click", resetFilters);
+    form.addEventListener("submit", handleFilterSubmit);
+    restoreFilters();
+</script>
+
+<ul class="list-group">
+    {% for todo in todos %}
+    <li class="list-group-item d-flex align-items-center gap-3 flex-wrap">
+        {% if todo.image_path %}
+            <img src="{{ url_for('images', path=todo.image_path) }}" alt="todo" style="width: 50px; height: 50px;">
+        {% endif %}
+
+        {% if todo.completed %}
+        <strike>{{ todo.title }}</strike>
+        {% else %}
+        <span>{{ todo.title }}</span>
+        {% endif %}
+
+        <div style="color: dodgerblue">
+            {{ todo.source }}
+        </div>
+
+        <div class="form-check form-switch ms-auto">
+            <label class="form-check-label" for="flexSwitchCheckChecked">Выполнено</label>
+            <input class="form-check-input completedTask" type="checkbox" id="flexSwitchCheckChecked"
+                   data-todo-id="{{ todo.id }}" data-todo-title="{{ todo.title }}"
+                   data-todo-details="{{ todo.details }}" data-todo-tag="{{ todo.tag }}" data-todo-date="{{ todo.created_at }}"
+                   data-todo-image="{{ todo.image_path }}" {% if todo.completed
+                   %}checked{% endif %}>
+        </div>
+
+        <div class="btn-group">
+            <a class="btn btn-success"
+               href="/todo/edit/{{ todo.id }}/?limit={{ limit }}&skip={{ page }}">Редактировать</a>
+            <button class="btn btn-danger deleteButton" href="#" data-todo-id="{{ todo.id }}">Удалить</button>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+
+<div class="d-flex justify-content-between align-items-center">
+
+    <nav>
+        <ul class="pagination">
+            {% for i in range(pages) %}
+            <li class="page-item {% if i == page %}active{% endif %}">
+                <a class="page-link"
+                   href="/todo/list/?limit={{ limit }}&skip={{ i }}{% if tag is not none %}&tag={{ tag.value }}{% endif %}{% if creation_date_start is not none %}&creation_date_start={{ creation_date_start.strftime('%Y-%m-%d') }}{% endif %}{% if creation_date_end is not none %}&creation_date_end={{ creation_date_end.strftime('%Y-%m-%d') }}{% endif %}">
+                    {{ i + 1 }}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </nav>
+
+    <div class="dropdown">
+        <button class="btn btn-danger dropdown-toggle px-4" type="button" onclick="toggleDeleteOptions()">
+            Удалить задачи
+        </button>
+
+        <div class="d-none position-absolute end-0 mt-1 bg-white rounded shadow-lg" id="deleteOptions"
+             style="min-width: 240px; z-index: 1000;">
+            <button class="btn btn-outline-danger w-100 border-0 text-start px-3 py-2"
+                    onclick="deleteAllTasks()">
+                Удалить все задачи
+            </button>
+            <button class="btn btn-outline-danger w-100 border-0 text-start px-3 py-2"
+                    onclick="handleDeleteOption('range')">
+                Удалить задачи по диапазону
+            </button>
+
+            <div class="d-none p-3" id="rangeInputs">
+                <div class="input-group input-group-sm flex-nowrap mb-1">
+                    <span class="input-group-text" for="startInput"
+                          style="width: 40px; justify-content: center;">С</span>
+                    <input type="number" class="form-control" id="startInput"
+                           min="1" value="1">
+                </div>
+                <div class="input-group input-group-sm flex-nowrap">
+                    <span class="input-group-text" for="endInput"
+                          style="width: 40px; justify-content: center;">По</span>
+                    <input type="number" class="form-control" id="endInput" min="1"
+                           value="1">
+                </div>
+
+                <button class="btn btn-success btn-sm mt-2 w-100" onclick="closeShowModal(deleteRange)">Подтвердить
+                </button>
+            </div>
+
+            <div class="alert alert-danger mt-2 mx-2 py-2 px-3 d-none" id="errorMsg" style="font-size: 0.875rem">
+                Некорректный диапазон
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+
+    document.querySelectorAll('.deleteButton').forEach(button => {
+        button.addEventListener('click', function (e) {
+            const todoId = this.dataset.todoId;
+
+            const action = () => {
+                fetch(`/todo/delete/${todoId}/`, {
+                    method: 'DELETE'
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        console.log('Успешно:', data);
+                        window.location.href = window.location.href.toString();
+                    })
+                    .catch(error => console.error('Ошибка:', error))
+            };
+            closeShowModal(action)
+        });
+    });
+
+    document.querySelectorAll('.completedTask').forEach(checkbox => {
+        checkbox.addEventListener('change', function () {
+            const todoId = this.dataset.todoId;
+            const todoTitle = this.dataset.todoTitle;
+            const todoDetails = this.dataset.todoDetails;
+            const todoTag = this.dataset.todoTag;
+            const todoDate = this.dataset.todoDate;
+            const todoImage = this.dataset.todoImage;
+            const formData = new FormData();
+            formData.append('id', todoId);
+            formData.append('title', todoTitle);
+            formData.append('details', todoDetails);
+            formData.append('tag', todoTag);
+            formData.append('completed', this.checked)
+            formData.append('created_at', todoDate)
+            formData.append('image_path', todoImage)
+
+            fetch(`/todo/edit/${todoId}/`, {
+                method: 'PUT',
+                body: formData
+            })
+                .then(res => res.json())
+                .then(data => {
+                    console.log('Успешно:', data);
+                    window.location.href = window.location.href.toString();
+                })
+                .catch(error => console.error('Ошибка:', error));
+        });
+    });
+
+    function toggleDeleteOptions() {
+        const deleteOptions = document.getElementById('deleteOptions');
+        deleteOptions.classList.toggle('d-none');
+
+        if (deleteOptions.classList.contains('d-none')) {
+            document.getElementById('rangeInputs').classList.add('d-none');
+            document.getElementById('errorMsg').classList.add('d-none');
+        }
+    }
+
+    function handleDeleteOption(option) {
+        const rangeInputs = document.getElementById('rangeInputs');
+        rangeInputs.classList.add('d-none');
+        document.getElementById('errorMsg').classList.add('d-none');
+
+        if (option === 'all') {
+            deleteAllTasks();
+        } else if (option === 'range') {
+            rangeInputs.classList.remove('d-none');
+            initializeRangeInputs();
+        }
+    }
+
+    const deleteAllTasks = () => {
+        const action = () => {
+            fetch(`/todo/delete/`, {
+                method: 'DELETE'
+            })
+                .then(res => res.json())
+                .catch(error => console.error('Ошибка:', error));
+
+            setTimeout(() => {
+                const params = new URLSearchParams(window.location.search);
+                params.set('skip', '0');
+                window.location.href = `${window.location.pathname}?${params.toString()}`;
+            }, 500);
+        }
+        closeShowModal(action)
+    }
+
+    function initializeRangeInputs() {
+        const tasks = document.getElementsByClassName('list-group-item');
+        const startInput = document.getElementById('startInput');
+        const endInput = document.getElementById('endInput');
+
+        startInput.max = tasks.length;
+        endInput.max = tasks.length;
+
+        startInput.value = 1;
+        endInput.value = tasks.length;
+    }
+
+    function deleteRange() {
+        const startInput = document.getElementById('startInput');
+        const endInput = document.getElementById('endInput');
+        const startIndex = parseInt(startInput.value);
+        const endIndex = parseInt(endInput.value);
+        const errorMsg = document.getElementById('errorMsg');
+
+        if (startIndex > endIndex || startIndex < 1) {
+            errorMsg.classList.remove('d-none');
+            return;
+        }
+
+        errorMsg.classList.add('d-none');
+
+        const params = new URLSearchParams(window.location.search);
+        params.set('start', startIndex.toString());
+        params.set('end', endIndex.toString());
+
+        fetch(`/todo/delete/?${params.toString()}`, {
+            method: 'DELETE'
+        })
+            .then(res => res.json())
+            .catch(error => console.error('Ошибка:', error));
+
+        setTimeout(() => {
+            window.location.href = window.location.href.toString();
+        }, 500);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const tasks = document.getElementsByClassName('list-group-item');
+        const startInput = document.getElementById('startInput');
+        const endInput = document.getElementById('endInput');
+
+        startInput.max = tasks.length;
+        endInput.max = tasks.length;
+        endInput.value = tasks.length;
+    });
+
+    document.addEventListener('click', function (e) {
+        const deleteOptions = document.getElementById('deleteOptions');
+        const deleteButton = document.querySelector('.dropdown button');
+        if (!deleteButton.contains(e.target) && !deleteOptions.contains(e.target)) {
+            deleteOptions.classList.add('d-none');
+            document.getElementById('rangeInputs').classList.add('d-none');
+            document.getElementById('errorMsg').classList.add('d-none');
+        }
+    });
+</script>
+
+{% endblock content %}

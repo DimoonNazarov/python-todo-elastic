@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:latest
+    container_name: test_db
+    env_file:
+      - .env
+    ports:
+      - "6000:5432"
+    volumes:
+      - postgres_data_7:/var/lib/postgresql/data
+
+  test:
+    build:
+      context: .
+    container_name: test_app
+    stdin_open: true
+    tty: true
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - ./app:/code/app
+      - ./data:/code/data
+      - ./scripts:/code/scripts
+      - ./images:/code/images
+volumes:
+  postgres_data_7:

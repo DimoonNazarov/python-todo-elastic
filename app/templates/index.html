@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+
+<form id="todoForm" class="d-flex flex-column gap-2">
+    <div class="form-floating">
+        <input minlength="3" maxlength="200" type="text" class="form-control" id="title" name="title"
+               placeholder="Введите задачу" required>
+        <label for="title">Введите задачу</label>
+    </div>
+    <div class="form-floating">
+        <textarea maxlength="500" class="form-control" placeholder="Введите описание задач" name="details" id="details"
+                  style="height: 100px"></textarea>
+        <label for="details">Введите описание задач</label>
+    </div>
+
+    <div class="form-floating">
+        <select class="form-select" name="tag" id="tag">
+            <option>Тип задачи:</option>
+            <option value="Учёба">Учёба</option>
+            <option value="Личное">Личное</option>
+            <option selected value="Планы">Планы</option>
+        </select>
+        <label for="tag">Тип задачи:</label>
+    </div>
+    <div class="form-group">
+        <label for="image">Выберите изображение:</label>
+        <input type="file" class="form-control" id="image" name="image" accept="image/*">
+    </div>
+
+    <button type="submit" class="btn btn-success">Добавить</button>
+</form>
+
+<script>
+    document.getElementById('todoForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+
+        const formData = new FormData(this);
+        formData.append('source', 'Созданная')
+
+        fetch('/todo/add/', {
+            method: 'POST',
+            body: formData
+        })
+                .then(res => {
+                    console.log(res.status)
+
+                    if (res.status == 401) {
+                        window.location.href = '/todo/401/';
+                        return
+                    }
+                    return res.json()
+                })
+                .then(data => {
+                    if (data == null){
+                        window.location.href = '/todo/401/';
+                    } else {
+                        console.log('Успешно:', data);
+                        window.location.href = '/todo/home/';
+                    }
+                })
+                .catch(error => console.error('Ошибка:', error));
+
+        this.reset();
+    });
+</script>
+
+{% endblock content %}
