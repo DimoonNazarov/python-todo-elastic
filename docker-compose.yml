@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   db:
-    image: postgres:latest
+    image: postgres:16-alpine
     container_name: db
     env_file:
       - .env
@@ -28,5 +28,51 @@ services:
       - ./scripts:/code/scripts
       - ./images:/code/images
       - ./files:/code/files
+
+
+  elastic:
+    image: elasticsearch:9.3.0
+    container_name: elastic
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=docker-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./data/elasticsearch:/usr/share/elasticsearch/data
+    networks:
+      - elastic-network
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    restart: unless-stopped
+
+
+  kibana:
+    image: kibana:9.3.0
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    networks:
+      - elastic-network
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elastic
+    restart: unless-stopped
+
+networks:
+  elastic-network:
+    driver: bridge
+
 volumes:
   postgres_data_8:
+
+
