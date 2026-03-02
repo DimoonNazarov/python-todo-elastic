@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 from app.database import get_es_client
 from app.elastic_repository import ElasticRepository
 from app.router import todo_router
+from app.elastic_router import elastic_router
 from app.auth import auth_router
 from app.utils import create_dirs
 
@@ -34,6 +35,7 @@ async def main_page():
 
 app.include_router(todo_router)
 app.include_router(auth_router)
+app.include_router(elastic_router)
 
 create_dirs()
 

@@ -222,6 +222,7 @@ class ElasticRepository:
 
         except NotFoundError:
             logger.warning("Todo %s not found in index on update.", todo_id)
+
         except Exception as e:
             logger.error("Failed to update todo %s in index: %s", todo_id, e)
 
@@ -414,3 +415,43 @@ class ElasticRepository:
         except Exception as e:
             logger.error(f"Failed to get statistics: {e}")
             return {}
+
+
+    async def search_by_date(self, date_from: str) -> List[dict]:
+        """Возвращает все тудушки, созданные после указанной даты"""
+        try:
+            response = await self._client.search(
+                index=INDEX_NAME,
+                body={
+                    "query": {
+                        "range": {
+                            "created_at": {
+                                "gte": date_from
+                            }
+                        }
+                    },
+                    "sort": [{"created_at": {"order": "desc"}}]
+                }
+            )
+            return [hit["_source"] for hit in response["hits"]["hits"]]
+        except Exception as e:
+            logger.error(f"Failed to get search results: {e}")
+            return []
+
+
+    async def search_by_tag(self, tag: str) -> List[dict]:
+        """Возвращает все тудушки с заданным тегом"""
+        try:
+            response = await self._client.search(
+                index=INDEX_NAME,
+                body={
+                    "query": {
+                        "term": {"tag": tag}
+                    },
+                    "sort": [{"created_at": {"order": "desc"}}]
+                }
+            )
+            return [hit["_source"] for hit in response["hits"]["hits"]]
+        except Exception as e:
+            logger.error(f"Failed to get search results: {e}")
+            return []

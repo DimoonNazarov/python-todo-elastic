@@ -101,6 +101,8 @@ async def get_todos(request: Request, uow_session: UnitOfWork = Depends(get_asyn
                                        "creation_date_end": creation_date_end, "tag": tag})
 
 
+
+
 @todo_router.post("/add/", status_code=status.HTTP_201_CREATED)
 async def add_todo(
         title: str = Form(...),
@@ -238,7 +240,7 @@ async def edit_todo(todo_id: int,
     todo_change.source = todo.source
 
     await uow_session.todo.update_todo(todo_id, todo_change.model_dump())
-    await uow_session.elastic.update_todo(todo_id, todo)
+    await uow_session.elastic.update_todo(todo_id, todo_change)
     return {
         "status": "success",
         "details": "Todo edited"
@@ -413,43 +415,8 @@ async def export_data(uow_session: UnitOfWork = Depends(get_async_uow_session)):
 
 
 
-@todo_router.get("/search/", response_class=HTMLResponse)
-async def search_page(request: Request):
-    """Страница поиска"""
-    return templates.TemplateResponse(
-        "search.html",
-        {"request": request}
-    )
 
 
-@todo_router.post("/search/", response_class=HTMLResponse)
-async def search_todos(
-        request: Request,
-        query: str = Form(...),
-        uow_session: UnitOfWork = Depends(get_async_uow_session)
-    ):
-    try:
-        results = await uow_session.elastic.search_todos(query)
-
-        # Было: hit["_source"]["todo_id"] — неверно, _source уже развёрнут
-        todo_ids = [hit["todo_id"] for hit in results]  # ✅
-
-        if todo_ids:
-            todos = await uow_session.todo.get_todos_by_ids(todo_ids)
-        else:
-            todos = []
-
-        return templates.TemplateResponse(
-            "search_results.html",
-            {
-                "request": request,
-                "todos": todos,
-                "query": query,
-                "count": len(todos)
-            })
-    except Exception as e:
-        logger.error(f"Search error: {e}")
-        ...
 
 
 

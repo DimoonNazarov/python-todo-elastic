@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+
+        <div class="d-flex align-items-center justify-content-between mt-4 mb-3">
+            <h2 class="h4 mb-0">🔍 Результаты поиска</h2>
+            <a href="/elastic/search/" class="btn btn-sm btn-outline-secondary">← Назад</a>
+        </div>
+
+        {% if subtitle %}
+        <p class="text-muted small mb-3">{{ subtitle }} — найдено: <strong>{{ count }}</strong></p>
+        {% endif %}
+
+        {% if results %}
+            {% for todo in results %}
+            <div class="card mb-3 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h5 class="card-title mb-1">{{ todo.title }}</h5>
+                        <div class="d-flex gap-2 align-items-center">
+                            {% if todo.tag %}
+                            <span class="badge 
+                                {% if todo.tag == 'Планы' %}bg-primary
+                                {% elif todo.tag == 'Учёба' %}bg-success
+                                {% elif todo.tag == 'Личное' %}bg-warning text-dark
+                                {% else %}bg-secondary
+                                {% endif %}">
+                                {{ todo.tag }}
+                            </span>
+                            {% endif %}
+                            {% if todo.completed %}
+                            <span class="badge bg-success">✓ Выполнено</span>
+                            {% else %}
+                            <span class="badge bg-light text-dark border">В процессе</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if todo.details %}
+                    <p class="card-text text-muted mt-2 mb-2">{{ todo.details }}</p>
+                    {% endif %}
+
+                    <div class="d-flex gap-3 mt-2">
+                        {% if todo.created_at %}
+                        <small class="text-muted">
+                            🕐 {{ todo.created_at[:16] | replace("T", " ") }}
+                        </small>
+                        {% endif %}
+                        {% if todo.completed_at %}
+                        <small class="text-success">
+                            ✅ {{ todo.completed_at[:16] | replace("T", " ") }}
+                        </small>
+                        {% endif %}
+                        {% if todo.classification_level %}
+                        <small class="text-danger">🔒 {{ todo.classification_level }}</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+
+        {% else %}
+            <div class="card mt-3">
+                <div class="card-body text-center text-muted py-5">
+                    <div style="font-size: 3rem">🗂</div>
+                    <p class="mt-2 mb-0">Ничего не найдено</p>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}
