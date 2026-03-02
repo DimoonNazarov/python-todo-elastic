@@ -90,7 +90,7 @@ async def get_todos(request: Request, uow_session: UnitOfWork = Depends(get_asyn
     if not pages:
         pages = 1
 
-    todos = await uow_session.todo.get_todos(limit, skip, creation_date_start, creation_date_end, tag)
+    todos = await uow_session.todo.get_many(limit, skip, creation_date_start, creation_date_end, tag)
 
     return templates.TemplateResponse("todos.html",
                                       {"request": request, "todos": todos, "page": skip, "pages": pages,
@@ -163,7 +163,7 @@ async def get_todo(
         uow_session: UnitOfWork = Depends(get_async_uow_session)
 ):
     """Get todo"""
-    todo = await uow_session.todo.get_todo(todo_id)
+    todo = await uow_session.todo.get_todo_by_id(todo_id)
     if not todo:
         logger.warning(f"Todo not found: {todo_id}")
         raise HTTPException(
@@ -192,7 +192,7 @@ async def edit_todo(todo_id: int,
                     uow_session: UnitOfWork = Depends(get_async_uow_session)
                     ):
     """Edit todo"""
-    todo = await uow_session.todo.get_todo(todo_id)
+    todo = await uow_session.todo.get_todo_by_id(todo_id)
 
     if not todo:
         raise HTTPException(
@@ -250,7 +250,7 @@ async def delete_todo(todo_id: int, limit: int = 10, skip: int = 0,
                       uow_session: UnitOfWork = Depends(get_async_uow_session)):
     """Delete todo
     """
-    todo = await uow_session.todo.get_todo(todo_id)
+    todo = await uow_session.todo.get_todo_by_id(todo_id)
 
     if not todo:
         raise HTTPException(
@@ -301,7 +301,7 @@ async def delete_todos(uow_session: UnitOfWork = Depends(get_async_uow_session),
 async def visualize_todos(request: Request, uow_session: UnitOfWork = Depends(get_async_uow_session)):
     """Visualize todos as a treemap by tags
     """
-    todos = await uow_session.todo.get_todos(limit=1000, skip=0)
+    todos = await uow_session.todo.get_many(limit=1000, skip=0)
 
     tag_counts = {tag.value: 0 for tag in Tags}
     for todo in todos:
@@ -382,7 +382,7 @@ async def import_file(file: UploadFile = File(...),
     todos = import_todos(file_location)
 
     for todo in todos:
-        await uow_session.todo.add_todo_object(todo)
+        await uow_session.todo.add(todo)
 
     return RedirectResponse("/todo/home", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -403,7 +403,7 @@ async def import_file(filename: str):
 
 @todo_router.post("/export/")
 async def export_data(uow_session: UnitOfWork = Depends(get_async_uow_session)):
-    todos = await uow_session.todo.get_all_todos()
+    todos = await uow_session.todo.get_all()
 
     export_todos(todos)
 
