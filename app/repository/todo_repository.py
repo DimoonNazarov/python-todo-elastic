@@ -19,8 +19,12 @@ class TodoRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
 
-    async def get_count_todos(self, creation_date_start: datetime = None,
-                              creation_date_end: datetime = None, tag: Tags = None):
+    async def get_count_todos(
+        self,
+        creation_date_start: datetime = None,
+        creation_date_end: datetime = None,
+        tag: Tags = None,
+    ):
         query = select(func.count()).select_from(Todo)
 
         if creation_date_start:
@@ -36,20 +40,25 @@ class TodoRepository:
 
     async def delete_todos(self, skip: int, limit: int, start: int, end: int):
         if not start and not end:
-            await self._session.execute(
-                delete(Todo)
-            )
+            await self._session.execute(delete(Todo))
         else:
             subquery = (
-                select(Todo.id).order_by(desc(Todo.id)).offset(skip * limit + (start - 1)).limit(end - start + 1)
+                select(Todo.id)
+                .order_by(desc(Todo.id))
+                .offset(skip * limit + (start - 1))
+                .limit(end - start + 1)
             )
 
-            await self._session.execute(
-                delete(Todo).where(Todo.id.in_(subquery))
-            )
+            await self._session.execute(delete(Todo).where(Todo.id.in_(subquery)))
 
-    async def get_todos(self, limit: int, skip: int, creation_date_start: datetime = None,
-                        creation_date_end: datetime = None, tag: Tags = None):
+    async def get_todos(
+        self,
+        limit: int,
+        skip: int,
+        creation_date_start: datetime = None,
+        creation_date_end: datetime = None,
+        tag: Tags = None,
+    ):
 
         query = select(Todo).order_by(desc(Todo.id)).offset(skip * limit).limit(limit)
 
@@ -64,7 +73,6 @@ class TodoRepository:
         data = find_todos.scalars().all()
         return data
 
-
     async def get_todos_by_ids(self, todo_ids: list):
 
         query = select(Todo).where(Todo.id.in_(todo_ids))
@@ -72,14 +80,12 @@ class TodoRepository:
         return result.scalars().all()
 
     async def get_all_todos(self):
-        find_todos = await self._session.execute(
-            select(Todo).order_by(desc(Todo.id))
-        )
+        find_todos = await self._session.execute(select(Todo).order_by(desc(Todo.id)))
         data = find_todos.scalars().all()
         return data
 
     async def add_todo(self, data: dict):
-        data['created_at'] = datetime.utcnow()
+        data["created_at"] = datetime.utcnow()
 
         # Создаем объект Todo
         todo = Todo(**data)
@@ -91,30 +97,25 @@ class TodoRepository:
 
         return todo
 
-
     async def add_todo_object(self, todo: Todo):
         self._session.add(todo)
 
     async def get_todo(self, todo_id: int):
-        find_todo = await self._session.execute(
-            select(Todo).where(Todo.id == todo_id)
-        )
+        find_todo = await self._session.execute(select(Todo).where(Todo.id == todo_id))
         data = find_todo.scalars().one_or_none()
         return data
 
     async def update_todo(self, todo_id: int, data: dict):
-        if data.get('completed'):
-            data['completed_at'] = datetime.utcnow()
+        if data.get("completed"):
+            data["completed_at"] = datetime.utcnow()
         else:
-            data['completed_at'] = None
+            data["completed_at"] = None
         await self._session.execute(
             update(Todo).where(Todo.id == todo_id).values(**data)
         )
 
     async def delete_todo(self, todo_id: int):
-        await self._session.execute(
-            delete(Todo).where(Todo.id == todo_id)
-        )
+        await self._session.execute(delete(Todo).where(Todo.id == todo_id))
 
     async def get_all_image_paths(self):
         find_images = await self._session.execute(
@@ -132,11 +133,7 @@ class TodoRepository:
 
     async def get_todos_by_image_path(self, image_path: str, todo_id: int):
         find_path = await self._session.execute(
-            select(Todo).where(
-                and_(Todo.image_path == image_path,
-                     Todo.id != todo_id))
+            select(Todo).where(and_(Todo.image_path == image_path, Todo.id != todo_id))
         )
         data = find_path.scalars().first()
         return data
-
-

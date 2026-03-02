@@ -15,26 +15,164 @@ SECRET_CLASSIFICATIONS = [
     "совершенно секретно",
     "особой важности",
     "для служебного пользования",
-    "конфиденциально"
+    "конфиденциально",
 ]
 
 # Список стоп-слов русского языка
 RUSSIAN_STOPWORDS = [
-    "и", "в", "во", "не", "что", "он", "на", "я", "с", "со", "как", "а", "то",
-    "все", "она", "так", "его", "но", "да", "ты", "к", "у", "же", "вы", "за",
-    "бы", "по", "только", "ее", "мне", "было", "вот", "от", "меня", "еще", "нет",
-    "о", "из", "ему", "теперь", "когда", "даже", "ну", "вдруг", "ли", "если", "уже",
-    "или", "ни", "быть", "был", "него", "до", "вас", "нибудь", "опять", "уж", "вам",
-    "ведь", "там", "потом", "себя", "ничего", "ей", "может", "они", "тут", "где",
-    "есть", "надо", "ней", "для", "мы", "тебя", "их", "чем", "была", "сам", "чтоб",
-    "без", "будто", "чего", "раз", "тоже", "себе", "под", "будет", "ж", "тогда",
-    "кто", "этот", "того", "потому", "этого", "какой", "совсем", "ним", "здесь",
-    "этом", "один", "почти", "мой", "тем", "чтобы", "нее", "сейчас", "были", "куда",
-    "зачем", "сказать", "всех", "никогда", "сегодня", "можно", "при", "наконец",
-    "два", "об", "другой", "хоть", "после", "над", "больше", "тот", "через", "эти",
-    "нас", "про", "всего", "них", "какая", "много", "разве", "три", "эту", "моя",
-    "впрочем", "хорошо", "свою", "этой", "перед", "иногда", "лучше", "чуть", "том",
-    "нельзя", "такой", "им", "более", "всегда", "конечно", "всю", "между"
+    "и",
+    "в",
+    "во",
+    "не",
+    "что",
+    "он",
+    "на",
+    "я",
+    "с",
+    "со",
+    "как",
+    "а",
+    "то",
+    "все",
+    "она",
+    "так",
+    "его",
+    "но",
+    "да",
+    "ты",
+    "к",
+    "у",
+    "же",
+    "вы",
+    "за",
+    "бы",
+    "по",
+    "только",
+    "ее",
+    "мне",
+    "было",
+    "вот",
+    "от",
+    "меня",
+    "еще",
+    "нет",
+    "о",
+    "из",
+    "ему",
+    "теперь",
+    "когда",
+    "даже",
+    "ну",
+    "вдруг",
+    "ли",
+    "если",
+    "уже",
+    "или",
+    "ни",
+    "быть",
+    "был",
+    "него",
+    "до",
+    "вас",
+    "нибудь",
+    "опять",
+    "уж",
+    "вам",
+    "ведь",
+    "там",
+    "потом",
+    "себя",
+    "ничего",
+    "ей",
+    "может",
+    "они",
+    "тут",
+    "где",
+    "есть",
+    "надо",
+    "ней",
+    "для",
+    "мы",
+    "тебя",
+    "их",
+    "чем",
+    "была",
+    "сам",
+    "чтоб",
+    "без",
+    "будто",
+    "чего",
+    "раз",
+    "тоже",
+    "себе",
+    "под",
+    "будет",
+    "ж",
+    "тогда",
+    "кто",
+    "этот",
+    "того",
+    "потому",
+    "этого",
+    "какой",
+    "совсем",
+    "ним",
+    "здесь",
+    "этом",
+    "один",
+    "почти",
+    "мой",
+    "тем",
+    "чтобы",
+    "нее",
+    "сейчас",
+    "были",
+    "куда",
+    "зачем",
+    "сказать",
+    "всех",
+    "никогда",
+    "сегодня",
+    "можно",
+    "при",
+    "наконец",
+    "два",
+    "об",
+    "другой",
+    "хоть",
+    "после",
+    "над",
+    "больше",
+    "тот",
+    "через",
+    "эти",
+    "нас",
+    "про",
+    "всего",
+    "них",
+    "какая",
+    "много",
+    "разве",
+    "три",
+    "эту",
+    "моя",
+    "впрочем",
+    "хорошо",
+    "свою",
+    "этой",
+    "перед",
+    "иногда",
+    "лучше",
+    "чуть",
+    "том",
+    "нельзя",
+    "такой",
+    "им",
+    "более",
+    "всегда",
+    "конечно",
+    "всю",
+    "между",
 ]
 
 # Три имени из группы (замените на реальные имена вашей группы)
@@ -53,23 +191,13 @@ def create_russian_analyzer_mapping():
                     "russian_analyzer": {
                         "type": "custom",
                         "tokenizer": "standard",
-                        "filter": [
-                            "lowercase",
-                            "russian_stop",
-                            "russian_stemmer"
-                        ]
+                        "filter": ["lowercase", "russian_stop", "russian_stemmer"],
                     }
                 },
                 "filter": {
-                    "russian_stop": {
-                        "type": "stop",
-                        "stopwords": ALL_STOPWORDS
-                    },
-                    "russian_stemmer": {
-                        "type": "stemmer",
-                        "language": "russian"
-                    }
-                }
+                    "russian_stop": {"type": "stop", "stopwords": ALL_STOPWORDS},
+                    "russian_stemmer": {"type": "stemmer", "language": "russian"},
+                },
             }
         },
         "mappings": {
@@ -78,23 +206,20 @@ def create_russian_analyzer_mapping():
                 "title": {
                     "type": "text",
                     "analyzer": "russian_analyzer",
-                    "fields": {
-                        "keyword": {"type": "keyword", "ignore_above": 256}
-                    }
+                    "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
                 },
-                "details": {
-                    "type": "text",
-                    "analyzer": "russian_analyzer"
-                },
+                "details": {"type": "text", "analyzer": "russian_analyzer"},
                 "tag": {"type": "keyword"},
                 "created_at": {"type": "date"},
                 "completed": {"type": "boolean"},
                 "completed_at": {"type": "date"},
-                "classification_level": {"type": "keyword"},  # Добавлено поле для уровня секретности
+                "classification_level": {
+                    "type": "keyword"
+                },  # Добавлено поле для уровня секретности
                 "masked_title": {"type": "text"},  # Замаскированный заголовок
-                "masked_details": {"type": "text"}  # Замаскированные детали
+                "masked_details": {"type": "text"},  # Замаскированные детали
             }
-        }
+        },
     }
 
 
@@ -131,7 +256,7 @@ def mask_classification(text: str, classification: str) -> str:
         "особой важности": "не интересссно",
         "для служебного пользования": "не интересно",
         "дсп": "не интересно",
-        "конфиденциально": "не интересно"
+        "конфиденциально": "не интересно",
     }
 
     result = text
@@ -171,20 +296,26 @@ class ElasticRepository:
                 "tag": todo.tag,
                 "created_at": todo.created_at.isoformat() if todo.created_at else None,
                 "completed": todo.completed,
-                "completed_at": todo.completed_at.isoformat() if todo.completed_at else None,
-                "classification_level": classification
+                "completed_at": (
+                    todo.completed_at.isoformat() if todo.completed_at else None
+                ),
+                "classification_level": classification,
             }
 
             # Если обнаружена классификация, добавляем замаскированные поля
             if classification:
-                document["masked_title"] = mask_classification(todo.title, classification)
-                document["masked_details"] = mask_classification(todo.details, classification) if todo.details else None
+                document["masked_title"] = mask_classification(
+                    todo.title, classification
+                )
+                document["masked_details"] = (
+                    mask_classification(todo.details, classification)
+                    if todo.details
+                    else None
+                )
                 logger.info(f"Todo {todo.id} has classification: {classification}")
 
             await self._client.index(
-                index=INDEX_NAME,
-                id=str(todo.id),
-                document=document
+                index=INDEX_NAME, id=str(todo.id), document=document
             )
             logger.info(f"Successfully indexed todo {todo.id}")
 
@@ -203,21 +334,24 @@ class ElasticRepository:
                 "details": todo.details,
                 "tag": todo.tag,
                 "completed": todo.completed,
-                "completed_at": todo.completed_at.isoformat() if todo.completed_at else None,
-                "classification_level": classification
+                "completed_at": (
+                    todo.completed_at.isoformat() if todo.completed_at else None
+                ),
+                "classification_level": classification,
             }
 
             # Добавляем замаскированные поля при необходимости
             if classification:
-                doc_update["masked_title"] = mask_classification(todo.title, classification)
-                doc_update["masked_details"] = mask_classification(todo.details,
-                                                                   classification) if todo.details else None
+                doc_update["masked_title"] = mask_classification(
+                    todo.title, classification
+                )
+                doc_update["masked_details"] = (
+                    mask_classification(todo.details, classification)
+                    if todo.details
+                    else None
+                )
 
-            await self._client.update(
-                index=INDEX_NAME,
-                id=str(todo_id),
-                doc=doc_update
-            )
+            await self._client.update(index=INDEX_NAME, id=str(todo_id), doc=doc_update)
             logger.info(f"Updated todo {todo_id} in index")
 
         except NotFoundError:
@@ -237,11 +371,7 @@ class ElasticRepository:
             logger.error("Failed to delete todo %s from index: %s", todo_id, e)
 
     async def search_todos(
-            self,
-            query_text: str,
-            tag: Optional[str] = None,
-            limit: int = 50,
-            skip: int = 0
+        self, query_text: str, tag: Optional[str] = None, limit: int = 50, skip: int = 0
     ) -> List[dict]:
         """
         Полнотекстовый поиск по title и details с нестрогим соответствием.
@@ -255,7 +385,7 @@ class ElasticRepository:
                         "query": query_text,
                         "fuzziness": "AUTO",  # Нечеткий поиск для опечаток
                         "operator": "or",
-                        "minimum_should_match": "50%"
+                        "minimum_should_match": "50%",
                     }
                 }
             },
@@ -265,33 +395,35 @@ class ElasticRepository:
                         "query": query_text,
                         "fuzziness": "AUTO",
                         "operator": "or",
-                        "minimum_should_match": "30%"
-                    }
-                }
-            }
-        ]
-
-        # Добавляем поиск по замаскированным полям, если они есть
-        should_clauses.extend([
-            {
-                "match": {
-                    "masked_title": {
-                        "query": query_text,
-                        "fuzziness": "AUTO",
-                        "operator": "or"
+                        "minimum_should_match": "30%",
                     }
                 }
             },
-            {
-                "match": {
-                    "masked_details": {
-                        "query": query_text,
-                        "fuzziness": "AUTO",
-                        "operator": "or"
+        ]
+
+        # Добавляем поиск по замаскированным полям, если они есть
+        should_clauses.extend(
+            [
+                {
+                    "match": {
+                        "masked_title": {
+                            "query": query_text,
+                            "fuzziness": "AUTO",
+                            "operator": "or",
+                        }
                     }
-                }
-            }
-        ])
+                },
+                {
+                    "match": {
+                        "masked_details": {
+                            "query": query_text,
+                            "fuzziness": "AUTO",
+                            "operator": "or",
+                        }
+                    }
+                },
+            ]
+        )
 
         must_clauses = []
         if tag:
@@ -311,24 +443,24 @@ class ElasticRepository:
                         "bool": {
                             "should": should_clauses,
                             "must": must_clauses,
-                            "minimum_should_match": 1
+                            "minimum_should_match": 1,
                         }
                     },
                     "sort": [
                         {"_score": {"order": "desc"}},  # Сначала по релевантности
-                        {"created_at": {"order": "desc"}}  # Потом по дате
+                        {"created_at": {"order": "desc"}},  # Потом по дате
                     ],
                     "highlight": {  # Подсветка совпадений
                         "fields": {
                             "title": {"number_of_fragments": 1},
                             "details": {"number_of_fragments": 2},
                             "masked_title": {"number_of_fragments": 1},
-                            "masked_details": {"number_of_fragments": 2}
+                            "masked_details": {"number_of_fragments": 2},
                         },
                         "pre_tags": ["<mark>"],
-                        "post_tags": ["</mark>"]
-                    }
-                }
+                        "post_tags": ["</mark>"],
+                    },
+                },
             )
 
             results = []
@@ -351,18 +483,18 @@ class ElasticRepository:
             logger.error("Search failed: %s", e)
             return []
 
-    async def search_by_classification(self, classification: str, limit: int = 50) -> List[dict]:
+    async def search_by_classification(
+        self, classification: str, limit: int = 50
+    ) -> List[dict]:
         """Поиск тудушек по уровню секретности"""
         try:
             response = await self._client.search(
                 index=INDEX_NAME,
                 body={
                     "size": limit,
-                    "query": {
-                        "term": {"classification_level": classification}
-                    },
-                    "sort": [{"created_at": {"order": "desc"}}]
-                }
+                    "query": {"term": {"classification_level": classification}},
+                    "sort": [{"created_at": {"order": "desc"}}],
+                },
             )
             return [hit["_source"] for hit in response["hits"]["hits"]]
         except Exception as e:
@@ -376,27 +508,18 @@ class ElasticRepository:
             agg_query = {
                 "size": 0,
                 "aggs": {
-                    "by_classification": {
-                        "terms": {"field": "classification_level"}
-                    },
-                    "by_tag": {
-                        "terms": {"field": "tag"}
-                    },
-                    "total_count": {
-                        "value_count": {"field": "todo_id"}
-                    }
-                }
+                    "by_classification": {"terms": {"field": "classification_level"}},
+                    "by_tag": {"terms": {"field": "tag"}},
+                    "total_count": {"value_count": {"field": "todo_id"}},
+                },
             }
 
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body=agg_query
-            )
+            response = await self._client.search(index=INDEX_NAME, body=agg_query)
 
             stats = {
                 "total": response["hits"]["total"]["value"],
                 "by_classification": {},
-                "by_tag": {}
+                "by_tag": {},
             }
 
             if "aggregations" in response:
@@ -416,28 +539,20 @@ class ElasticRepository:
             logger.error(f"Failed to get statistics: {e}")
             return {}
 
-
     async def search_by_date(self, date_from: str) -> List[dict]:
         """Возвращает все тудушки, созданные после указанной даты"""
         try:
             response = await self._client.search(
                 index=INDEX_NAME,
                 body={
-                    "query": {
-                        "range": {
-                            "created_at": {
-                                "gte": date_from
-                            }
-                        }
-                    },
-                    "sort": [{"created_at": {"order": "desc"}}]
-                }
+                    "query": {"range": {"created_at": {"gte": date_from}}},
+                    "sort": [{"created_at": {"order": "desc"}}],
+                },
             )
             return [hit["_source"] for hit in response["hits"]["hits"]]
         except Exception as e:
             logger.error(f"Failed to get search results: {e}")
             return []
-
 
     async def search_by_tag(self, tag: str) -> List[dict]:
         """Возвращает все тудушки с заданным тегом"""
@@ -445,13 +560,27 @@ class ElasticRepository:
             response = await self._client.search(
                 index=INDEX_NAME,
                 body={
-                    "query": {
-                        "term": {"tag": tag}
-                    },
-                    "sort": [{"created_at": {"order": "desc"}}]
-                }
+                    "query": {"term": {"tag": tag}},
+                    "sort": [{"created_at": {"order": "desc"}}],
+                },
             )
             return [hit["_source"] for hit in response["hits"]["hits"]]
         except Exception as e:
             logger.error(f"Failed to get search results: {e}")
             return []
+
+    async def get_all_todos(self, limit: int = 50, skip: int = 0):
+        """Возвращает все тудушки из индекса"""
+        try:
+            response = await self._client.search(
+                index=INDEX_NAME,
+                body={
+                    "from": skip,
+                    "size": limit,
+                    "query": {"match_all": {}},
+                    "sort": [{"created_at": {"order": "desc"}}],
+                },
+            )
+            return [hit["_source"] for hit in response["hits"]["hits"]]
+        except Exception as e:
+            logger.error("Failed to get all todos: %s", e)

@@ -25,34 +25,34 @@ elastic_router = APIRouter(prefix="/elastic")
 
 @elastic_router.get("/search/date/", status_code=status.HTTP_200_OK)
 async def search_by_date(
-        request: Request,
-        date_from: datetime,
-        uow_session: UnitOfWork = Depends(get_async_uow_session),
+    request: Request,
+    date_from: datetime,
+    uow_session: UnitOfWork = Depends(get_async_uow_session),
 ):
     """Поиск тудушек, созданных после указанной даты (формат: 2024-01-01T00:00:00)"""
     results = await uow_session.elastic.search_by_date(date_from.isoformat())
-    return templates.TemplateResponse("tag_results.html", {
-        "request": request,
-        "results": results,
-        "count": len(results),
-        "subtitle": f"После {date_from.strftime('%d.%m.%Y %H:%M')}",
-    })
+    return templates.TemplateResponse(
+        "tag_results.html",
+        {
+            "request": request,
+            "results": results,
+            "count": len(results),
+            "subtitle": f"После {date_from.strftime('%d.%m.%Y %H:%M')}",
+        },
+    )
 
 
 @elastic_router.get("/search/", response_class=HTMLResponse)
 async def search_page(request: Request):
     """Страница поиска"""
-    return templates.TemplateResponse(
-        "search.html",
-        {"request": request}
-    )
+    return templates.TemplateResponse("search.html", {"request": request})
 
 
 @elastic_router.post("/search/", response_class=HTMLResponse)
 async def search_todos(
-        request: Request,
-        query: str = Form(...),
-        uow_session: UnitOfWork = Depends(get_async_uow_session)
+    request: Request,
+    query: str = Form(...),
+    uow_session: UnitOfWork = Depends(get_async_uow_session),
 ):
     try:
         results = await uow_session.elastic.search_todos(query)
@@ -67,11 +67,27 @@ async def search_todos(
 
         return templates.TemplateResponse(
             "search_results.html",
-            {
-                "request": request,
-                "todos": todos,
-                "query": query,
-                "count": len(todos)
-            })
+            {"request": request, "todos": todos, "query": query, "count": len(todos)},
+        )
     except Exception as e:
         logger.error(f"Search error: {e}")
+
+
+@elastic_router.get("/search/tag/{tag}", status_code=status.HTTP_200_OK)
+async def search_by_tag(
+    request: Request,
+    tag: str,
+    uow_session: UnitOfWork = Depends(get_async_uow_session),
+):
+    """Поиск тудушек по тегу"""
+    tag_normalized = tag.capitalize()
+    results = await uow_session.elastic.search_by_tag(tag_normalized)
+    return templates.TemplateResponse(
+        "tag_results.html",
+        {
+            "request": request,
+            "results": results,
+            "count": len(results),
+            "subtitle": f"Тег: {tag_normalized}",
+        },
+    )
