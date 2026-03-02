@@ -2,7 +2,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: db
+    container_name: todo-db
     env_file:
       - .env
     ports:
@@ -22,16 +22,16 @@ services:
   web:
     build:
       context: .
-    container_name: app
+    container_name: todo-app
     command: ["/code/docker_scripts/app.sh"]
     env_file:
       - .env
     ports:
       - "8000:8000"
     depends_on:
-      db:
+      todo-db:
         condition: service_healthy
-      elasticsearch:
+      todo-elasticsearch:
         condition: service_healthy
     volumes:
       - ./app:/code/app
@@ -45,7 +45,7 @@ services:
 
   elasticsearch:
     image: elasticsearch:9.3.0
-    container_name: elasticsearch
+    container_name: todo-elasticsearch
     environment:
       - node.name=elasticsearch
       - cluster.name=docker-cluster
@@ -76,7 +76,7 @@ services:
 
   kibana:
     image: kibana:9.3.0
-    container_name: kibana
+    container_name: todo-kibana
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - ELASTICSEARCH_SSL_VERIFICATION_MODE=none
@@ -87,7 +87,7 @@ services:
     ports:
       - "5601:5601"
     depends_on:
-      - elasticsearch
+      - todo-elasticsearch
     restart: unless-stopped
 
 networks:
