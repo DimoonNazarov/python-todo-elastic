@@ -91,7 +91,7 @@ class TokenRepository:
 
     async def validate_refresh_token(
         self, refresh_token: str
-    ) -> Optional[RefreshToken]:
+    ) -> RefreshToken | None:
         """
         Проверить валидность refresh token
 

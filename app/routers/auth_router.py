@@ -5,9 +5,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from typing import Annotated
 
 from app.dependencies import get_auth_service
-from app.exceptions import UserAlreadyExists, InactiveUser, InvalidCredentials
+from app.exceptions import UserAlreadyExists, InactiveUserException, InvalidCredentials
 from app.utils import OAuth2PasswordBearerWithCookie
-from app.schemas import User, SUserRegister
+from app.schemas import User, SUserRegister, SUserAuth
 from app.core import get_async_uow_session, UnitOfWork
 from app.services import AuthService
 
@@ -44,14 +44,19 @@ async def get_current_active_user(
 @auth_router.post("/token", response_class=HTMLResponse)
 async def login(
     request: Request,
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    user_data: SUserAuth,
     uow_session: UnitOfWork = Depends(get_async_uow_session),
     auth_service: AuthService = Depends(get_auth_service),
 ):
+
+    user_agent = request.headers.get("User-Agent")
+    ip_address = request.client.host if request.client else None
+
     try:
-        user = await auth_service.login(
-            username=form_data.username,
-            password=form_data.password,
+        tokens = await auth_service.login_user(
+            user_data=user_data,
+            user_agent=user_agent,
+            ip_address=ip_address,
             uow_session=uow_session,
         )
     except InvalidCredentials:
@@ -60,7 +65,7 @@ async def login(
             {"request": request, "error": "Incorrect username or password"},
             status_code=status.HTTP_400_BAD_REQUEST,
         )
-    except InactiveUser:
+    except InactiveUserException:
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": "Inactive user"},
@@ -69,7 +74,23 @@ async def login(
 
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     response.set_cookie(
-        key="access_token", value=f"Bearer {form_data.username}", httponly=True
+        key="access_token",
+        value=f"Bearer {tokens.access_token}",
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=tokens.expires_in,
+        path="/"
+    )
+
+    response.set_cookie(
+        key="refresh_token",
+        value=f"Bearer {tokens.refresh_token}",
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=tokens.expires_in,
+        path="/auth/refresh"
     )
     return response
 
@@ -107,15 +128,12 @@ async def get_register(request: Request):
 @auth_router.post("/register", response_class=HTMLResponse)
 async def register(
     request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
-    uow_session: UnitOfWork = Depends(get_async_uow_session),
-    auth_service: AuthService = Depends(get_auth_service),
+    user_data: SUserRegister,
+    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ):
     try:
-        await auth_service.register(
-            username=username, password=password, uow_session=uow_session
-        )
+        await auth_service.register_user(uow_session=uow_session, user_data=user_data)
     except UserAlreadyExists:
         return templates.TemplateResponse(
             "register.html",
