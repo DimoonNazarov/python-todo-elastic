@@ -10,5 +10,9 @@ class InvalidCredentials(AuthError):
     pass
 
 
-class InactiveUser(AuthError):
+class InactiveUserException(AuthError):
+    pass
+
+
+class IncorrectEmailOrPasswordException(AuthError):
     pass

@@ -13,17 +13,10 @@ class AuthRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
 
-    async def get_user(self, username: str) -> User:
-        find_user = await self._session.execute(
-            select(User).where(User.name == username)
-        )
-        data = find_user.scalars().one_or_none()
-        return data
-
-    async def set_disabled(self, username: str, value: bool):
-        await self._session.execute(
-            update(User).where(User.name == username).values(disabled=value)
-        )
+    # async def set_disabled(self, username: str, value: bool):
+    #     await self._session.execute(
+    #         update(User).where(User.name == username).values(disabled=value)
+    #     )
 
     async def find_by_email(self, email: str) -> User | None:
         """Найти пользователя по email"""
@@ -58,6 +51,11 @@ class AuthRepository:
         """Добавить нескольких пользователей"""
         self._session.add(users)
 
+    async def get_active_users(self) -> Sequence[User]:
+        """ Получить всех активных пользователей """
+        filter_dict = {"is_active": True}
+        return await self.find_all(filter_dict=filter_dict)
+
     # async def update(self, filters: SUserFilter, update_data: SUserUpdate) -> int:
     #     """
     #     Обновить пользователей по фильтрам
@@ -75,11 +73,6 @@ class AuthRepository:
     #     if not update_dict:
     #         logger.warning("Нет данных для обновления")
     #         return 0
-    #
-    #     logger.debug(
-    #         f"Обновление пользователей по фильтру: {filter_dict} с параметрами: {update_dict}"
-    #     )
-    #
     #     try:
     #         query = (
     #             update(User)
@@ -96,7 +89,7 @@ class AuthRepository:
     #     except SQLAlchemyError as e:
     #         logger.error(f"Ошибка при обновлении пользователей: {e}")
     #         raise
-    #
+
     # async def update_by_id(self, user_id: int, update_data: SUserUpdate) -> bool:
     #     """
     #     Обновить пользователя по ID
@@ -140,20 +133,12 @@ class AuthRepository:
     #         logger.error(f"Ошибка при обновлении пользователя с ID {user_id}: {e}")
     #         raise
     #
-    # async def delete(self, filters: SUserFilter) -> int:
-    #     """
-    #     Удалить пользователей по фильтрам
-    #     """
-    #
-    #     filter_dict = filters.model_dump(exclude_unset=True)
-    #
-    #     if not filter_dict:
-    #         logger.error("Нужен хотя бы один фильтр для удаления")
-    #         raise ValueError("Нужен хотя бы один фильтр для удаления")
-    #
-    #     query = delete(User).filter_by(**filter_dict)
-    #     result = await self._session.execute(query)
-    #     return result.rowcount
+    async def delete(self, filter_dict: dict) -> int:
+        """ Удалить пользователей по фильтрам """
+
+        stmt = delete(User).filter_by(**filter_dict)
+        result = await self._session.execute(stmt)
+        return result.rowcount
 
     async def delete_by_id(self, user_id: int) -> bool:
         """
@@ -221,15 +206,7 @@ class AuthRepository:
     #         logger.error(f"Ошибка при проверке существования пользователя: {e}")
     #         raise
     #
-    # async def get_active_users(self) -> List["User"]:
-    #     """
-    #     Получить всех активных пользователей
-    #
-    #     Returns:
-    #         Список активных пользователей
-    #     """
-    #     logger.debug("Получение списка активных пользователей")
-    #     return await self.find_all(SUserFilter(is_active=True))
+
     #
     # async def get_users_by_role(self, role: UserRole) -> List["User"]:
     #     """

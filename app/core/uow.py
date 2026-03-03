@@ -8,6 +8,7 @@ from elasticsearch import AsyncElasticsearch
 from app.repository import TodoRepository
 from app.repository import AuthRepository
 from app.repository.elastic_repository import ElasticRepository
+from app.repository.token_repository import TokenRepository
 
 
 class UnitOfWork:
@@ -40,3 +41,7 @@ class UnitOfWork:
     @property
     def auth(self) -> AuthRepository:
         return AuthRepository(self._session)
+
+    @property
+    def token(self) -> TokenRepository:
+        return TokenRepository(self._session)
