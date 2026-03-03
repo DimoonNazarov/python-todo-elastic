@@ -5,5 +5,5 @@ __all__ = [
     "get_es_client",
     "close_es_client",
     "get_async_uow_session",
-    "UnitOfWork"
+    "UnitOfWork",
 ]
