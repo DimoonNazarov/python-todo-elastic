@@ -7,17 +7,11 @@ from fastapi import Depends
 from fastapi.templating import Jinja2Templates
 
 templates = Jinja2Templates(directory="app/templates")
-from fastapi import status
-from fastapi import Form
-
+from fastapi import status, Form
+from fastapi.responses import JSONResponse
 from starlette.responses import HTMLResponse
 
 from app.core.database import get_async_uow_session
-
-from app.utils import generate_random_filename
-
-from app.utils import import_todos
-
 from app.core.uow import UnitOfWork
 
 elastic_router = APIRouter(prefix="/elastic")
@@ -91,3 +85,20 @@ async def search_by_tag(
             "subtitle": f"Тег: {tag_normalized}",
         },
     )
+
+
+@elastic_router.get("/search/top-words/", status_code=status.HTTP_200_OK)
+async def search_by_top_words(
+    request: Request,
+    limit: int = 10,
+    uow_session: UnitOfWork = Depends(get_async_uow_session),
+):
+    """
+    Возвращает топ-N популярных слов в формате JSON.
+    """
+    try:
+        words = await uow_session.elastic.get_top_words(limit)
+        return JSONResponse({"words": words})
+    except Exception as e:
+        logger.error("Top words error: %s", e)
+        return JSONResponse({"words": []})

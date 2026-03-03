@@ -21,30 +21,19 @@
                     </div>
                 </form>
 
-                <div class="mt-3">
-                    <small class="text-muted">Примеры запросов:</small>
-                    <div class="d-flex flex-wrap gap-2 mt-2">
-                        <span class="badge bg-light text-dark p-2"
-                              style="cursor: pointer;"
-                              onclick="document.querySelector('[name=query]').value='красный'">
-                            красный
-                        </span>
-                        <span class="badge bg-light text-dark p-2"
-                              style="cursor: pointer;"
-                              onclick="document.querySelector('[name=query]').value='важная задача'">
-                            важная задача
-                        </span>
-                        <span class="badge bg-light text-dark p-2"
-                              style="cursor: pointer;"
-                              onclick="document.querySelector('[name=query]').value='работа'">
-                            работа
-                        </span>
-                        <span class="badge bg-light text-dark p-2"
-                              style="cursor: pointer;"
-                              onclick="document.querySelector('[name=query]').value='секретно'">
-                            секретно
-                        </span>
-                    </div>
+                <hr class="my-3">
+
+                <!-- 🔥 КНОПКА ТОП-СЛОВ -->
+                <div class="mb-3 text-center">
+                    <button id="topWordsBtn" class="btn btn-outline-dark">
+                        🔥 Показать 10 самых популярных слов
+                    </button>
+                </div>
+
+                <!-- БЛОК ДЛЯ ВЫВОДА СЛОВ -->
+                <div id="topWordsContainer" class="mt-3" style="display: none;">
+                    <h6 class="text-muted">Топ популярных слов:</h6>
+                    <div id="topWordsList" class="d-flex flex-wrap gap-2 mt-2"></div>
                 </div>
 
                 <hr class="my-3">
@@ -91,9 +80,9 @@
                 <h5 class="card-title h6">💡 Как это работает</h5>
                 <ul class="small text-muted mb-0 ps-3">
                     <li>Поиск учитывает разные формы слов</li>
-                    <li>Грифы секретности заменяются автоматически</li>
                     <li>Можно искать по заголовку и описанию</li>
                     <li>Фильтрация по тегу и дате через Elasticsearch</li>
+                    <li>Популярные слова считаются через significant_text</li>
                 </ul>
             </div>
         </div>
@@ -102,14 +91,49 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const input = document.querySelector('[name=query]');
-    if (input) {
-        input.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                this.form.submit();
+
+    const btn = document.getElementById("topWordsBtn");
+    const container = document.getElementById("topWordsContainer");
+    const list = document.getElementById("topWordsList");
+
+    btn.addEventListener("click", async function() {
+        btn.disabled = true;
+        btn.innerText = "Загрузка...";
+
+        try {
+            const response = await fetch("/elastic/search/top-words/?limit=10");
+            const data = await response.json();
+
+            list.innerHTML = "";
+
+            if (data.words.length === 0) {
+                list.innerHTML = "<span class='text-muted'>Нет данных</span>";
+            } else {
+                data.words.forEach(item => {
+                    const badge = document.createElement("span");
+                    badge.className = "badge bg-primary p-2";
+                    badge.style.cursor = "pointer";
+                    badge.innerText = `${item.word} (${item.count})`;
+
+                    // Клик по слову вставляет его в поиск
+                    badge.onclick = function() {
+                        document.querySelector('[name=query]').value = item.word;
+                    };
+
+                    list.appendChild(badge);
+                });
             }
-        });
-    }
+
+            container.style.display = "block";
+        } catch (e) {
+            list.innerHTML = "<span class='text-danger'>Ошибка загрузки</span>";
+            container.style.display = "block";
+        }
+
+        btn.disabled = false;
+        btn.innerText = "Показать 10 самых популярных слов";
+    });
 });
 </script>
+
 {% endblock %}
