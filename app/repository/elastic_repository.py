@@ -183,19 +183,25 @@ ALL_STOPWORDS = RUSSIAN_STOPWORDS + [name.lower() for name in GROUP_NAMES]
 
 
 def create_russian_analyzer_mapping():
-    """Создает маппинг с русским анализатором и фильтрами"""
     return {
         "settings": {
             "analysis": {
                 "analyzer": {
-                    "russian_analyzer": {
+                    # Для поиска (со stemmer)
+                    "russian_search_analyzer": {
                         "type": "custom",
                         "tokenizer": "standard",
                         "filter": ["lowercase", "russian_stop", "russian_stemmer"],
-                    }
+                    },
+                    # Для красивых топ-слов (БЕЗ stemmer)
+                    "russian_agg_analyzer": {
+                        "type": "custom",
+                        "tokenizer": "standard",
+                        "filter": ["lowercase", "russian_stop"],
+                    },
                 },
                 "filter": {
-                    "russian_stop": {"type": "stop", "stopwords": ALL_STOPWORDS},
+                    "russian_stop": {"type": "stop", "stopwords": "_russian_"},
                     "russian_stemmer": {"type": "stemmer", "language": "russian"},
                 },
             }
@@ -205,19 +211,33 @@ def create_russian_analyzer_mapping():
                 "todo_id": {"type": "integer"},
                 "title": {
                     "type": "text",
-                    "analyzer": "russian_analyzer",
-                    "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+                    "analyzer": "russian_search_analyzer",
+                    "fields": {
+                        "agg": {
+                            "type": "text",
+                            "analyzer": "russian_agg_analyzer",
+                            "fielddata": True,
+                        }
+                    },
                 },
-                "details": {"type": "text", "analyzer": "russian_analyzer"},
+                "details": {
+                    "type": "text",
+                    "analyzer": "russian_search_analyzer",
+                    "fields": {
+                        "agg": {
+                            "type": "text",
+                            "analyzer": "russian_agg_analyzer",
+                            "fielddata": True,
+                        }
+                    },
+                },
                 "tag": {"type": "keyword"},
                 "created_at": {"type": "date"},
                 "completed": {"type": "boolean"},
                 "completed_at": {"type": "date"},
-                "classification_level": {
-                    "type": "keyword"
-                },  # Добавлено поле для уровня секретности
-                "masked_title": {"type": "text"},  # Замаскированный заголовок
-                "masked_details": {"type": "text"},  # Замаскированные детали
+                "classification_level": {"type": "keyword"},
+                "masked_title": {"type": "text"},
+                "masked_details": {"type": "text"},
             }
         },
     }
@@ -584,3 +604,42 @@ class ElasticRepository:
             return [hit["_source"] for hit in response["hits"]["hits"]]
         except Exception as e:
             logger.error("Failed to get all todos: %s", e)
+
+    async def get_top_words(self, limit: int = 10):
+        try:
+            response = await self._client.search(
+                index=INDEX_NAME,
+                body={
+                    "size": 0,
+                    "aggs": {
+                        "top_title": {"terms": {"field": "title.agg", "size": limit}},
+                        "top_details": {
+                            "terms": {"field": "details.agg", "size": limit}
+                        },
+                    },
+                },
+            )
+
+            words_counter = {}
+
+            aggs = response.get("aggregations", {})
+
+            for bucket in aggs.get("top_title", {}).get("buckets", []):
+                words_counter[bucket["key"]] = bucket["doc_count"]
+
+            for bucket in aggs.get("top_details", {}).get("buckets", []):
+                words_counter[bucket["key"]] = (
+                    words_counter.get(bucket["key"], 0) + bucket["doc_count"]
+                )
+
+            sorted_words = sorted(
+                words_counter.items(), key=lambda x: x[1], reverse=True
+            )
+
+            return [
+                {"word": word, "count": count} for word, count in sorted_words[:limit]
+            ]
+
+        except Exception as e:
+            logger.error(f"Failed to get top words: {e}")
+            return []
