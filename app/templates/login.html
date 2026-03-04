@@ -1,57 +1,276 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ToDo App</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', path='css/auth.css') }}">
+    <title>Вход</title>
     <style>
-        .bd-placeholder-img {
-            font-size: 1.125rem;
-            text-anchor: middle;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            user-select: none;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        @media (min-width: 768px) {
-            .bd-placeholder-img-lg {
-                font-size: 3.5rem;
-            }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
-        .login-button {
-            margin-top: 10px;
+        .container {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f0f2f5;
+        }
+
+        .card {
+            width: 400px;
+            padding: 32px;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .title {
+            margin-bottom: 24px;
+            color: #333;
+            font-size: 24px;
+        }
+
+        .error {
+            color: #f44336;
+            margin-bottom: 16px;
+            padding: 10px;
+            background: #ffebee;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .success {
+            color: #4CAF50;
+            margin-bottom: 16px;
+            padding: 10px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+        }
+
+        .form-group label {
+            font-size: 14px;
+            margin-bottom: 4px;
+            color: #555;
+        }
+
+        .input {
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+            width: 100%;
+            transition: border-color 0.3s;
+        }
+
+        .input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        .input.error {
+            border-color: #f44336;
+        }
+
+        .field-error {
+            color: #f44336;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .button {
+            padding: 12px;
+            border-radius: 6px;
+            border: none;
+            background: #4CAF50;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 8px;
+        }
+
+        .button:hover {
+            background: #45a049;
+        }
+
+        .button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .footer-text {
+            margin-top: 16px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .link {
+            color: #4CAF50;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .link:hover {
+            color: #45a049;
+        }
+
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4CAF50;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
-<body class="text-center">
+<body>
+<div class="container">
+    <div class="card">
+        <h2 class="title">Вход</h2>
 
-<main class="container w-50 center">
-    <form action="/auth/token" method="post">
-        <h1 class="h3 mb-3 fw-normal">Please sign in</h1>
+        <div id="errorContainer" class="error" style="display: none;"></div>
+        <div id="successContainer" class="success" style="display: none;"></div>
 
-        <div class="form-floating" style="margin-bottom: 10px">
-            <input type="text" class="form-control" id="floatingInput" placeholder="chiiriill" name="username">
-            <label for="floatingInput">Username</label>
-        </div>
-        <div class="form-floating">
-            <input type="password" class="form-control" id="floatingPassword" placeholder="Password" name="password">
-            <label for="floatingPassword">Password</label>
-        </div>
-
-        <button class="w-100 btn btn-lg btn-primary login-button" type="submit">Sign in</button>
-        {% if error %}
-            <div class="alert alert-danger mt-3" role="alert">
-                {{ error }}
+        <form id="loginForm" class="form">
+            <!-- Email -->
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    class="input"
+                    placeholder="Email"
+                    required
+                >
+                <div id="emailError" class="field-error"></div>
             </div>
-        {% endif %}
-        <p class="mt-3 mb-3 text-muted">Don't you have an account? <a href="/auth/register">Register</a></p>
-        <p class="mt-5 mb-3 text-muted">© 2024</p>
-    </form>
-</main>
 
+            <!-- Пароль -->
+            <div class="form-group">
+                <label for="password">Пароль</label>
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    class="input"
+                    placeholder="Пароль"
+                    required
+                >
+                <div id="passwordError" class="field-error"></div>
+            </div>
+
+            <button type="submit" class="button" id="submitBtn">
+                Войти
+            </button>
+
+            <div id="loader" class="loader" style="display: none;"></div>
+        </form>
+
+        <p class="footer-text">
+            Нет аккаунта?
+            <a href="/auth/register" class="link">Зарегистрироваться</a>
+        </p>
+    </div>
+</div>
+
+<script>
+    const form = document.getElementById('loginForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const loader = document.getElementById('loader');
+    const errorContainer = document.getElementById('errorContainer');
+    const successContainer = document.getElementById('successContainer');
+
+    function clearErrors() {
+        errorContainer.style.display = 'none';
+        errorContainer.innerHTML = '';
+        successContainer.style.display = 'none';
+        successContainer.innerHTML = '';
+
+        document.querySelectorAll('.field-error').forEach(el => {
+            el.innerHTML = '';
+        });
+        document.querySelectorAll('.input').forEach(el => {
+            el.classList.remove('error');
+        });
+    }
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearErrors();
+
+        submitBtn.disabled = true;
+        loader.style.display = 'block';
+
+        const formData = {
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value
+        };
+
+        try {
+            const response = await fetch('/auth/token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            });
+
+<!--            const data = await response.json();-->
+
+            if (response.ok) {
+                successContainer.style.display = 'block';
+                successContainer.innerHTML = 'Вход выполнен успешно! Перенаправляем...';
+
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1000);
+            } else {
+                errorContainer.style.display = 'block';
+                errorContainer.innerHTML = data.detail || 'Неверный email или пароль';
+            }
+
+        } catch (error) {
+            errorContainer.style.display = 'block';
+            errorContainer.innerHTML = 'Ошибка соединения с сервером';
+        } finally {
+            submitBtn.disabled = false;
+            loader.style.display = 'none';
+        }
+    });
+</script>
 </body>
 </html>

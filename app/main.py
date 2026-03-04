@@ -8,9 +8,9 @@ from fastapi.responses import RedirectResponse
 
 from app.core.database import get_es_client
 from app.repository.elastic_repository import ElasticRepository
-from app.routers import todo_router, elastic_router
-from app.routers.auth_router import auth_router
+from app.routers import todo_router, elastic_router, auth_router
 from app.utils import create_dirs
+from app.models import Base
 
 
 @asynccontextmanager

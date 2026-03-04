@@ -64,3 +64,4 @@ tzdata==2024.2
 urllib3==2.6.3
 uvicorn==0.31.0
 yarl==1.22.0
+email-validator>=2.1.0

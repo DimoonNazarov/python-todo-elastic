@@ -39,6 +39,8 @@ services:
       - ./scripts:/code/scripts
       - ./images:/code/images
       - ./files:/code/files
+      - ./migrations:/code/migrations
+      - ./templates:/code/templates
     networks:
       - app-network
 

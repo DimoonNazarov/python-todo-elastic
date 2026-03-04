@@ -1,3 +1,5 @@
-from .models import User, Todo, Base
+from .models import Todo, Base
+from .refresh_token import RefreshToken
+from .user import User, UserRole
 
-__all__ = ["User", "Todo", "Base"]
+__all__ = ["User", "UserRole", "RefreshToken", "Todo", "Base"]

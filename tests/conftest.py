@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.database import get_async_uow_session
-from app.models import Base
+from app.models import base
 from app.main import app
 from app.core.uow import UnitOfWork
 from app.config import get_db_url

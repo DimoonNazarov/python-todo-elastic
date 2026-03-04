@@ -1,56 +1,379 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ToDo App - Register</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', path='css/auth.css') }}">
+    <title>Регистрация</title>
     <style>
-        .bd-placeholder-img {
-            font-size: 1.125rem;
-            text-anchor: middle;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            user-select: none;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        @media (min-width: 768px) {
-            .bd-placeholder-img-lg {
-                font-size: 3.5rem;
-            }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
-        .register-button {
-            margin-top: 10px;
+        .container {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f0f2f5;
+        }
+
+        .card {
+            width: 400px;
+            padding: 32px;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .title {
+            margin-bottom: 24px;
+            color: #333;
+            font-size: 24px;
+        }
+
+        .error {
+            color: #f44336;
+            margin-bottom: 16px;
+            padding: 10px;
+            background: #ffebee;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .success {
+            color: #4CAF50;
+            margin-bottom: 16px;
+            padding: 10px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+        }
+
+        .form-group label {
+            font-size: 14px;
+            margin-bottom: 4px;
+            color: #555;
+        }
+
+        .input {
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+            width: 100%;
+            transition: border-color 0.3s;
+        }
+
+        .input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        .input.error {
+            border-color: #f44336;
+        }
+
+        .field-error {
+            color: #f44336;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .button {
+            padding: 12px;
+            border-radius: 6px;
+            border: none;
+            background: #4CAF50;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 8px;
+        }
+
+        .button:hover {
+            background: #45a049;
+        }
+
+        .button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .footer-text {
+            margin-top: 16px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .link {
+            color: #4CAF50;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .link:hover {
+            color: #45a049;
+        }
+
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4CAF50;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
-<body class="text-center">
+<body>
+    <div class="container">
+        <div class="card">
+            <h2 class="title">Регистрация</h2>
 
-<main class="container w-50 center">
-    <form action="/auth/register" method="post">
-        <h1 class="h3 mb-3 fw-normal">Register</h1>
+            <!-- Блок для отображения ошибок -->
+            <div id="errorContainer" class="error" style="display: none;"></div>
 
-        <div class="form-floating" style="margin-bottom: 10px">
-            <input type="text" class="form-control" id="floatingInput" placeholder="chiiriill" name="username" required>
-            <label for="floatingInput">Username</label>
+            <!-- Блок для успешных сообщений -->
+            <div id="successContainer" class="success" style="display: none;"></div>
+
+            <form id="registerForm" class="form">
+                <!-- Email -->
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        class="input"
+                        placeholder="Email"
+                        required
+                    >
+                    <div id="emailError" class="field-error"></div>
+                </div>
+
+                <!-- Имя -->
+                <div class="form-group">
+                    <label for="first_name">Имя</label>
+                    <input
+                        type="text"
+                        id="first_name"
+                        name="first_name"
+                        class="input"
+                        placeholder="Имя"
+                        required
+                        minlength="3"
+                        maxlength="50"
+                    >
+                    <div id="first_nameError" class="field-error"></div>
+                </div>
+
+                <!-- Фамилия -->
+                <div class="form-group">
+                    <label for="last_name">Фамилия</label>
+                    <input
+                        type="text"
+                        id="last_name"
+                        name="last_name"
+                        class="input"
+                        placeholder="Фамилия"
+                        required
+                        minlength="3"
+                        maxlength="50"
+                    >
+                    <div id="last_nameError" class="field-error"></div>
+                </div>
+
+                <!-- Пароль -->
+                <div class="form-group">
+                    <label for="password">Пароль</label>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        class="input"
+                        placeholder="Пароль"
+                        required
+                        minlength="5"
+                        maxlength="50"
+                    >
+                    <div id="passwordError" class="field-error"></div>
+                </div>
+
+                <!-- Подтверждение пароля -->
+                <div class="form-group">
+                    <label for="confirm_password">Подтвердите пароль</label>
+                    <input
+                        type="password"
+                        id="confirm_password"
+                        name="confirm_password"
+                        class="input"
+                        placeholder="Подтвердите пароль"
+                        required
+                        minlength="5"
+                        maxlength="50"
+                    >
+                    <div id="confirm_passwordError" class="field-error"></div>
+                </div>
+
+                <button type="submit" class="button" id="submitBtn">
+                    Зарегистрироваться
+                </button>
+
+                <div id="loader" class="loader" style="display: none;"></div>
+            </form>
+
+            <p class="footer-text">
+                Уже есть аккаунт?
+                <a href="/auth/login" class="link">Войти</a>
+            </p>
         </div>
-        <div class="form-floating">
-            <input type="password" class="form-control" id="floatingPassword" placeholder="Password" name="password" required>
-            <label for="floatingPassword">Password</label>
-        </div>
+    </div>
 
-        <button class="w-100 btn btn-lg btn-primary register-button" type="submit">Register</button>
-        {% if error %}
-            <div class="alert alert-danger mt-3" role="alert">
-                {{ error }}
-            </div>
-        {% endif %}
-        <p class="mt-5 mb-3 text-muted">© 2024</p>
-    </form>
-</main>
+    <script>
+        const form = document.getElementById('registerForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const loader = document.getElementById('loader');
+        const errorContainer = document.getElementById('errorContainer');
+        const successContainer = document.getElementById('successContainer');
 
+        // Функция для очистки предыдущих ошибок
+        function clearErrors() {
+            errorContainer.style.display = 'none';
+            errorContainer.innerHTML = '';
+            successContainer.style.display = 'none';
+            successContainer.innerHTML = '';
+
+            // Очищаем ошибки полей
+            document.querySelectorAll('.field-error').forEach(el => {
+                el.innerHTML = '';
+            });
+            document.querySelectorAll('.input').forEach(el => {
+                el.classList.remove('error');
+            });
+        }
+
+        // Функция для отображения ошибок полей
+        function showFieldErrors(errors) {
+            for (const [field, messages] of Object.entries(errors)) {
+                const errorElement = document.getElementById(`${field}Error`);
+                const inputElement = document.getElementById(field);
+
+                if (errorElement && messages.length > 0) {
+                    errorElement.innerHTML = messages.join(', ');
+                    if (inputElement) {
+                        inputElement.classList.add('error');
+                    }
+                }
+            }
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            clearErrors();
+
+            // Показываем загрузку
+            submitBtn.disabled = true;
+            loader.style.display = 'block';
+
+            // Проверка совпадения паролей на клиенте
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm_password').value;
+
+            if (password !== confirmPassword) {
+                errorContainer.style.display = 'block';
+                errorContainer.innerHTML = 'Пароли не совпадают';
+                submitBtn.disabled = false;
+                loader.style.display = 'none';
+                return;
+            }
+
+            // Собираем данные в JSON
+            const formData = {
+                email: document.getElementById('email').value,
+                first_name: document.getElementById('first_name').value,
+                last_name: document.getElementById('last_name').value,
+                password: password,
+                confirm_password: confirmPassword
+            };
+
+            try {
+                const response = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    // Успешная регистрация
+                    successContainer.style.display = 'block';
+                    successContainer.innerHTML = 'Регистрация успешна! Перенаправляем...';
+
+                    // Очищаем форму
+                    form.reset();
+
+                    // Используем location из ответа сервера
+                    const redirectUrl = response.headers.get('location') || '/auth/login';
+
+                    setTimeout(() => {
+                        window.location.href = redirectUrl;
+                    }, 1500);
+                } else {
+                    // Обработка ошибок
+                    errorContainer.style.display = 'block';
+
+                    if (data.detail) {
+                        // Обычная ошибка
+                        errorContainer.innerHTML = data.detail;
+                    } else if (data.errors) {
+                        // Ошибки валидации полей
+                        errorContainer.innerHTML = 'Проверьте правильность заполнения полей';
+                        showFieldErrors(data.errors);
+                    } else {
+                        errorContainer.innerHTML = 'Произошла ошибка при регистрации';
+                    }
+                }
+            } catch (error) {
+                errorContainer.style.display = 'block';
+                errorContainer.innerHTML = 'Ошибка соединения с сервером';
+            } finally {
+                // Скрываем загрузку
+                submitBtn.disabled = false;
+                loader.style.display = 'none';
+            }
+        });
+    </script>
 </body>
 </html>
