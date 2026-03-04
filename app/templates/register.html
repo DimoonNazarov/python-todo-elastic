@@ -336,20 +336,20 @@
                     body: JSON.stringify(formData)
                 });
 
-                const data = await response.json();
-
                 if (response.ok) {
                     // Успешная регистрация
                     successContainer.style.display = 'block';
-                    successContainer.innerHTML = data.message || 'Регистрация успешна!';
+                    successContainer.innerHTML = 'Регистрация успешна! Перенаправляем...';
 
                     // Очищаем форму
                     form.reset();
 
-                    // Перенаправление через 2 секунды
+                    // Используем location из ответа сервера
+                    const redirectUrl = response.headers.get('location') || '/auth/login';
+
                     setTimeout(() => {
-                        window.location.href = '/auth/login';
-                    }, 2000);
+                        window.location.href = redirectUrl;
+                    }, 1500);
                 } else {
                     // Обработка ошибок
                     errorContainer.style.display = 'block';

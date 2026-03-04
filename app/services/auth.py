@@ -90,7 +90,6 @@ class AuthService:
             user = User(
                 email=user_data.email,
                 hashed_password=hashed_password,
-                role=user_data.role,
                 first_name=user_data.first_name,
                 last_name=user_data.last_name,
             )
