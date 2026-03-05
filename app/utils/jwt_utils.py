@@ -4,6 +4,9 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError, ExpiredSignatureError
 
 from app.config import settings
+from logging import getLogger
+
+logger = getLogger(__name__)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -43,14 +46,31 @@ def create_refresh_token() -> str:
     return secrets.token_urlsafe(48)
 
 
-def verify_access_token(token: str) -> dict:
-    """Проверяет и декодирует JWT Access Token"""
-    payload = jwt.decode(
-        token,
-        settings.JWT_SECRET_KEY,
-        algorithms=[settings.JWT_ALGORITHM],
-    )
-    return payload
+def verify_access_token(token: str) -> dict | None:
+    """
+    Проверяет JWT токен и возвращает payload если токен валидный
+
+    Args:
+        token: JWT токен для проверки
+
+    Returns:
+        dict: payload токена или None если токен невалидный
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+        logger.error([payload])
+        return payload
+
+    except ExpiredSignatureError:
+        logger.error("Token has expired")
+        return None
+    except JWTError as e:
+        logger.error("Invalid token: %s", e)
+        return None
 
 
 # async def get_current_user(

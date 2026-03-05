@@ -20,7 +20,6 @@ auth_router = APIRouter(prefix="/auth", tags=["Auth"])
 oauth2_scheme = OAuth2PasswordBearerWithCookie(tokenUrl="token")
 
 
-
 @auth_router.get("/login", status_code=status.HTTP_200_OK)
 async def get_home(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
