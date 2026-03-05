@@ -16,3 +16,17 @@ class InactiveUserException(AuthError):
 
 class IncorrectEmailOrPasswordException(AuthError):
     pass
+
+
+class AppException(Exception):
+    """Базовое доменное исключение"""
+
+    pass
+
+
+class NotFoundException(AppException):
+    pass
+
+
+class InvalidPageException(AppException):
+    pass

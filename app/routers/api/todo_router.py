@@ -1,6 +1,8 @@
 import base64
 import math
 import io
+from typing import Any
+
 import squarify
 import os
 import asyncio
@@ -273,22 +275,10 @@ async def delete_todo(
     limit: int = 10,
     skip: int = 0,
     uow_session: UnitOfWork = Depends(get_async_uow_session),
-):
+    todo_service: TodoService = Depends(get_todo_service),
+) -> dict[str, Any]:
     """Delete todo"""
-    todo = await uow_session.todo.get_todo_by_id(todo_id)
-
-    if not todo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Not found todo by this id: {todo_id}",
-        )
-
-    logger.info(f"Deleting todo: {todo}")
-    if await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id) is None:
-        await delete_image(todo.image_path)
-
-    await uow_session.todo.delete_todo(todo_id)
-    await uow_session.elastic.delete_todo(todo_id)
+    await todo_service.delete(uow_session=uow_session, todo_id=todo_id)
     return {
         "status": "success",
         "details": "Todo deleted",
