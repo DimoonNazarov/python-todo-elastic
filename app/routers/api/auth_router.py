@@ -74,7 +74,7 @@ async def login(
         secure=False,
         samesite="lax",
         max_age=tokens.expires_in,
-        path="/auth/refresh",
+        path="/auth",  # работает для /auth/refresh и /auth/logout
     )
     return response
 
@@ -104,17 +104,25 @@ async def register(
 
 
 @auth_router.get("/logout")
-async def login(
-    current_user: Annotated[User, Depends(get_current_user)],
+async def logout(
+    request: Request,
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ):
-    await auth_service.logout(username=current_user.name, uow_session=uow_session)
-
     response = RedirectResponse("/auth/login", status_code=302)
     response.delete_cookie("access_token")
-    return response
+    response.delete_cookie("refresh_token", path="/auth")
 
+    # Пытаемся отозвать refresh токен — только если он есть
+    raw = request.cookies.get("refresh_token")
+    if raw:
+        refresh_token = raw.removeprefix("Bearer ").strip()
+        try:
+            await uow_session.token.revoke_refresh_token(refresh_token)
+        except Exception:
+            pass  # не важно, cookie уже удалены
+
+    return response
 
 @auth_router.get("/users/me")
 async def read_users_me(

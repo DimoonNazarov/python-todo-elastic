@@ -33,13 +33,13 @@ async def lifespan(app: FastAPI):
     await close_es_client()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, redirect_slashes=False)
 app.add_middleware(JwtAuthMiddleware)
 
 
 @app.get("/")
 async def main_page():
-    return RedirectResponse("/todo/home", status_code=303)
+    return RedirectResponse("/todo/home/", status_code=303)
 
 
 app.include_router(todo_router)

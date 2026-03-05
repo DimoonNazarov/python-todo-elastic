@@ -62,7 +62,9 @@ def verify_access_token(token: str) -> dict | None:
             settings.JWT_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
         )
-        logger.error([payload])
+        if not payload.get("user_id"):
+            logger.error("Token missing user_id")
+            return None
         return payload
 
     except ExpiredSignatureError:

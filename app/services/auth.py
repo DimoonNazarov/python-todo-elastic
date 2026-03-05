@@ -99,9 +99,21 @@ class AuthService:
     async def logout(
         self,
         *,
-        username: str,
+        refresh_token: str | None,
         uow_session: UnitOfWork,
     ) -> None:
-
         async with uow_session.start():
-            await uow_session.auth.set_disabled(username, True)
+            if refresh_token:
+                await uow_session.token.revoke_refresh_token(
+                    refresh_token=refresh_token
+                )
+            # если токена нет — просто ничего не делаем, cookie всё равно удалятся
+
+    async def logout_all_devices(
+        self,
+        *,
+        user_id: int,
+        uow_session: UnitOfWork,
+    ) -> None:
+        async with uow_session.start():
+            await uow_session.token.revoke_all_user_tokens(user_id=user_id)

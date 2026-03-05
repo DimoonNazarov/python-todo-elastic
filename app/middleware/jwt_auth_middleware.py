@@ -135,14 +135,15 @@ class JwtAuthMiddleware(BaseHTTPMiddleware):
     ) -> Response:
 
         original_path = request.url.path
-        normalized_path = original_path.rstrip("/")
+        #normalized_path = original_path.rstrip("/")
+        normalized_path = original_path
 
-        if original_path != normalized_path:
-            _normalize_path(
-                request=request,
-                original_path=original_path,
-                normalized_path=normalized_path,
-            )
+        # if original_path != normalized_path:
+        #     _normalize_path(
+        #         request=request,
+        #         original_path=original_path,
+        #         normalized_path=normalized_path,
+        #     )
         if normalized_path in self.PUBLIC_PATHS:
             return await call_next(request)
 
