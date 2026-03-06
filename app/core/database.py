@@ -2,6 +2,7 @@
 """
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine
+from typing import AsyncGenerator
 
 from elasticsearch import AsyncElasticsearch
 
@@ -31,6 +32,5 @@ async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
 uow = UnitOfWork(async_session_maker, get_es_client())
 
 
-async def get_async_uow_session() -> UnitOfWork:
-    async with uow.start() as uow_session:
-        yield uow_session
+async def get_async_uow_session() -> AsyncGenerator[UnitOfWork, None]:
+    yield uow

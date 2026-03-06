@@ -37,6 +37,7 @@ class TodoService:
         tag: Tags,
         source: TodoSource,
         image: Optional[UploadFile],
+        author_id: int
     ) -> None:
 
         async with uow_session.start():
@@ -66,6 +67,7 @@ class TodoService:
                 image_path=image_path,
                 image_hash=image_hash,
                 completed=False,
+                author_id=author_id,
             )
 
             await uow_session.todo.add(todo)

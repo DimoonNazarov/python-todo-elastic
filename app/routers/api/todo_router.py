@@ -2,7 +2,6 @@ import base64
 import math
 import io
 from typing import Any
-
 import squarify
 import os
 import asyncio
@@ -24,10 +23,12 @@ from fastapi import (
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
 from fastapi.responses import FileResponse
+from typing import Annotated
 
-from app.core.database import get_async_uow_session
+from app.core import get_async_uow_session
 from app.dependencies import get_todo_service
-from app.schemas import User, TodoSource, Todo, Tags
+from app.routers.dependencies import get_current_user, get_current_active_user
+from app.schemas import User, TodoSource, Todo, Tags, SUserInfo
 from app.services.todo import TodoService
 from app.utils import (
     generate_random_filename,
@@ -108,13 +109,14 @@ async def get_todos(
 
 @todo_router.post("/add/", status_code=status.HTTP_201_CREATED)
 async def add_todo(
+    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+    todo_service: Annotated[TodoService, Depends(get_todo_service)],
+    user: Annotated[SUserInfo, Depends(get_current_active_user)],
     title: str = Form(...),
     details: str = Form(...),
     tag: Tags = Form(...),
     image: UploadFile = File(None),
     source: TodoSource = Form(...),
-    uow_session: UnitOfWork = Depends(get_async_uow_session),
-    todo_service: TodoService = Depends(get_todo_service),
 ):
     """Add new todo"""
     logger.info(
@@ -132,6 +134,7 @@ async def add_todo(
         tag=tag,
         source=source,
         image=image,
+        author_id=user.id,
     )
 
     return {"status": "success", "details": "Todo added"}
