@@ -1,4 +1,4 @@
-from .models import Todo, Base
+from .todo import Todo, Base
 from .refresh_token import RefreshToken
 from .user import User, UserRole
 

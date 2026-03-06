@@ -33,4 +33,7 @@ class User(Base):
         DateTime(timezone=True), onupdate=func.now()
     )
 
-    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    refresh_tokens = relationship(
+        "RefreshToken", back_populates="user", cascade="all, delete-orphan"
+    )
+    todos = relationship("Todo", back_populates="author", cascade="all, delete-orphan")
