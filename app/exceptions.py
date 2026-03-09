@@ -6,10 +6,6 @@ class UserAlreadyExists(AuthError):
     pass
 
 
-class InvalidCredentials(AuthError):
-    pass
-
-
 class InactiveUserException(AuthError):
     pass
 
@@ -29,4 +25,8 @@ class NotFoundException(AppException):
 
 
 class InvalidPageException(AppException):
+    pass
+
+
+class OperationNotPermittedException(AppException):
     pass

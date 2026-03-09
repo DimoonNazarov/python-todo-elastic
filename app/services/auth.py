@@ -10,7 +10,6 @@ from app.core import UnitOfWork
 from app.models import User
 from app.exceptions import (
     UserAlreadyExists,
-    InvalidCredentials,
     InactiveUserException,
     IncorrectEmailOrPasswordException,
 )

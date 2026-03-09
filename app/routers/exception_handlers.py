@@ -1,7 +1,10 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from app.exceptions import NotFoundException, InvalidPageException
-
+from app.exceptions import (
+    NotFoundException,
+    InvalidPageException,
+    IncorrectEmailOrPasswordException,
+)
 
 async def not_found_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, NotFoundException)
@@ -11,3 +14,7 @@ async def not_found_handler(request: Request, exc: Exception) -> JSONResponse:
 async def invalid_page_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, InvalidPageException)
     return JSONResponse(status_code=404, content={"det ail": str(exc)})
+
+async def invalid_credentials_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, IncorrectEmailOrPasswordException)
+    return JSONResponse(status_code=404, content={"Incorrect email or password": str(exc)})

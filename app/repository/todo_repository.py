@@ -110,6 +110,12 @@ class TodoRepository:
         data = find_hash.scalars().first()
         return data.image_path if data else None
 
+    async def get_todo_by_image_path(self, image_path: str) -> Todo | None:
+        result = await self._session.execute(
+            select(Todo).where(Todo.image_path == image_path)
+        )
+        return result.scalars().first()
+
     async def get_todos_by_image_path(self, image_path: str, todo_id: int):
         find_path = await self._session.execute(
             select(Todo).where(and_(Todo.image_path == image_path, Todo.id != todo_id))

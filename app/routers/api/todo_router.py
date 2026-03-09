@@ -1,4 +1,5 @@
 import base64
+import logging
 import math
 import io
 from typing import Any
@@ -8,7 +9,6 @@ import asyncio
 import shutil
 import matplotlib.pyplot as plt
 import seaborn as sb
-from loguru import logger
 from datetime import datetime
 from fastapi import (
     APIRouter,
@@ -45,7 +45,7 @@ todo_router = APIRouter(prefix="/todo", tags=["Todo"])
 # pylint: disable=invalid-name
 templates = Jinja2Templates(directory="app/templates")
 
-logger = logger.opt(colors=True)
+logger = logging.getLogger(__name__)
 
 
 # pylint: enable=invalid-name
@@ -120,11 +120,11 @@ async def add_todo(
 ):
     """Add new todo"""
     logger.info(
-        f"Creating todo: title=%s, details=%s, tag=%s, source=%s",
+        "Creating todo: title= %s, details= %s, tag= %s, source= %s",
         title,
         details,
         tag,
-        source,
+        source
     )
 
     await todo_service.create(
@@ -149,15 +149,16 @@ async def get_todo(
     uow_session: UnitOfWork = Depends(get_async_uow_session),
 ):
     """Get todo"""
-    todo = await uow_session.todo.get_todo_by_id(todo_id)
-    if not todo:
-        logger.warning(f"Todo not found: {todo_id}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Not found todo by this id: {todo_id}",
-        )
+    async with uow_session.start():
+        todo = await uow_session.todo.get_todo_by_id(todo_id)
+        if not todo:
+            logger.warning(f"Todo not found: {todo_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Not found todo by this id: {todo_id}",
+            )
 
-    images = await uow_session.todo.get_all_image_paths()
+        images = await uow_session.todo.get_all_image_paths()
 
     logger.info(f"Getting todo: {todo}")
     return templates.TemplateResponse(
@@ -175,6 +176,9 @@ async def get_todo(
 
 @todo_router.put("/edit/{todo_id}/", status_code=status.HTTP_200_OK)
 async def edit_todo(
+    user: Annotated[SUserInfo, Depends(get_current_active_user)],
+    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+    todo_service: Annotated[TodoService, Depends(get_todo_service)],
     todo_id: int,
     title: str = Form(None),
     details: str = Form(None),
@@ -184,91 +188,21 @@ async def edit_todo(
     image_path: str = Form(None),
     existing_image: str = Form(None),
     image: UploadFile = File(None),
-    uow_session: UnitOfWork = Depends(get_async_uow_session),
 ):
     """Edit todo"""
-    todo = await uow_session.todo.get_todo_by_id(todo_id)
-
-    if not todo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Not found todo by this id: {todo_id}",
-        )
-
-    if image and image.filename:
-        random_filename = (
-            generate_random_filename() + "." + image.filename.split(".")[-1]
-        )
-        image_hash = await hash_image(image)
-        duplicate_image_path = await uow_session.todo.is_duplicate_image(image_hash)
-
-        if (
-            await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id)
-            is None
-        ):
-            await delete_image(todo.image_path)
-
-        if duplicate_image_path:
-            logger.info("Duplicate image detected.")
-            todo_change = Todo(
-                title=title,
-                details=details,
-                completed=completed,
-                tag=tag,
-                created_at=created_at,
-                image_path=duplicate_image_path,
-                image_hash=image_hash,
-            )
-        else:
-            await load_image(image, random_filename)
-            todo_change = Todo(
-                title=title,
-                details=details,
-                completed=completed,
-                tag=tag,
-                created_at=created_at,
-                image_path=random_filename,
-                image_hash=image_hash,
-            )
-    elif existing_image:
-        data = await uow_session.todo.get_todos_by_image_path(existing_image, todo.id)
-        image_hash = data.image_hash
-
-        if (
-            await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id)
-            is None
-        ):
-            await delete_image(todo.image_path)
-
-        todo_change = Todo(
-            title=title,
-            details=details,
-            completed=completed,
-            tag=tag,
-            created_at=created_at,
-            image_path=existing_image,
-            image_hash=image_hash,
-        )
-    else:
-        todo_change = Todo(
-            title=title,
-            details=details,
-            completed=completed,
-            tag=tag,
-            created_at=created_at,
-            image_path=image_path,
-            image_hash=todo.image_hash,
-        )
-
-    logger.info(f"Editting todo: {todo}")
-
-    if todo_change.completed:
-        todo_change.completed_at = datetime.utcnow()
-
-    todo_change.source = todo.source
-
-    await uow_session.todo.update(todo_id=todo_id, values=todo_change.model_dump())
-    await uow_session.elastic.update_todo(todo_id, todo_change)
+    todo = await todo_service.update(
+        uow_session=uow_session,
+        user=user,
+        todo_id=todo_id,
+        title=title,
+        details=details,
+        completed=completed,
+        tag=tag,
+        created_at=created_at,
+        image_path=image_path,
+        existing_image=existing_image,
+        image=image,
+    )
     return {"status": "success", "details": "Todo edited"}
 
 
