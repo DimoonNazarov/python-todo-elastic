@@ -1,8 +1,12 @@
-from fastapi import Request
+from fastapi import Request, status
 from fastapi.responses import JSONResponse
-from starlette import status
 
-from app.exceptions import NotFoundException, InvalidPageException, ForbiddenException
+from app.exceptions import (
+    NotFoundException,
+    InvalidPageException,
+    IncorrectEmailOrPasswordException,
+    ForbiddenException,
+)
 
 
 async def not_found_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -15,7 +19,15 @@ async def not_found_handler(request: Request, exc: Exception) -> JSONResponse:
 async def invalid_page_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, InvalidPageException)
     return JSONResponse(
-        status_code=status.HTTP_404_NOT_FOUND, content={"detail": str(exc)}
+        status_code=status.HTTP_404_NOT_FOUND, content={"det ail": str(exc)}
+    )
+
+
+async def invalid_credentials_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, IncorrectEmailOrPasswordException)
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"Incorrect email or password": str(exc)},
     )
 
 

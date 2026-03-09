@@ -6,8 +6,7 @@ import enum
 
 class UserRole(str, enum.Enum):
     ADMIN = "admin"
-    USER = "user"
-    VIEWER = "viewer"
+    EDITOR = "editor"
 
 
 # OAuth2 Schemas

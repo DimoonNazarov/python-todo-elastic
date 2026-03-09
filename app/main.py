@@ -7,7 +7,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
 from app.core.database import get_es_client
-from app.exceptions import NotFoundException, InvalidPageException, ForbiddenException
+from app.exceptions import (
+    NotFoundException,
+    InvalidPageException,
+    IncorrectEmailOrPasswordException,
+    ForbiddenException
+)
+
 from app.repository.elastic_repository import ElasticRepository
 from app.routers import (
     todo_router,
@@ -17,6 +23,7 @@ from app.routers import (
     invalid_page_handler,
     forbidden_handler,
 )
+from app.routers.exception_handlers import invalid_credentials_handler
 from app.utils import create_dirs
 from app.middleware import JwtAuthMiddleware
 
@@ -55,4 +62,5 @@ app.mount("/images", StaticFiles(directory="images"), name="images")
 
 app.add_exception_handler(NotFoundException, not_found_handler)
 app.add_exception_handler(InvalidPageException, invalid_page_handler)
+app.add_exception_handler(IncorrectEmailOrPasswordException,invalid_credentials_handler)
 app.add_exception_handler(ForbiddenException, forbidden_handler)

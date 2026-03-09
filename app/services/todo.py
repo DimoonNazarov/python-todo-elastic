@@ -1,16 +1,19 @@
-import os
+import logging
 import math
 from datetime import datetime, UTC
 from typing import Optional
-
 from collections.abc import Sequence
-from fastapi import HTTPException, status, UploadFile
-from loguru import logger
+from fastapi import UploadFile
 
-from app.exceptions import InvalidPageException, NotFoundException, ForbiddenException
+from app.exceptions import (
+    InvalidPageException,
+    NotFoundException,
+    OperationNotPermittedException,
+    ForbiddenException
+)
+
 from app.models import Todo as TodoORM
-from app.schemas import Tags, TodoSource
-from app.repository import TodoRepository
+from app.schemas import Tags, TodoSource, SUserInfo, UserRole, Todo as TodoSchema
 from app.core import UnitOfWork
 from app.utils import (
     generate_random_filename,
@@ -19,6 +22,8 @@ from app.utils import (
     hash_image,
 )
 
+
+logger = logging.getLogger(__name__)
 
 class TodoService:
 
@@ -109,6 +114,117 @@ class TodoService:
             )
 
         return todos, skip, pages
+
+    async def update(
+        self,
+        uow_session: UnitOfWork,
+        user: SUserInfo,
+        todo_id: int,
+        title: str | None,
+        details: str | None,
+        completed: bool,
+        tag: Tags | None,
+        created_at: datetime | None,
+        image_path: str | None,
+        existing_image: str | None,
+        image: UploadFile | None,
+    ) -> TodoORM:
+        async with uow_session.start():
+            todo = await uow_session.todo.get_todo_by_id(todo_id)
+
+            if not todo:
+                raise NotFoundException(f"Todo with id {todo_id} not found")
+
+            if todo.author_id != user.id and user.role != UserRole.ADMIN:
+                raise OperationNotPermittedException("Operation not permitted")
+
+            if image and image.filename:
+                random_filename = (
+                    generate_random_filename() + "." + image.filename.split(".")[-1]
+                )
+                image_hash = await hash_image(image)
+                duplicate_image_path = await uow_session.todo.is_duplicate_image(
+                    image_hash
+                )
+
+                if (
+                    await uow_session.todo.get_todos_by_image_path(
+                        todo.image_path, todo.id
+                    )
+                    is None
+                ):
+                    await delete_image(todo.image_path)
+
+                if duplicate_image_path:
+                    logger.info("Duplicate image detected.")
+                    todo_change = TodoSchema(
+                        title=title,
+                        details=details,
+                        completed=completed,
+                        tag=tag,
+                        created_at=created_at,
+                        image_path=duplicate_image_path,
+                        image_hash=image_hash,
+                    )
+                else:
+                    await load_image(image, random_filename)
+                    todo_change = TodoSchema(
+                        title=title,
+                        details=details,
+                        completed=completed,
+                        tag=tag,
+                        created_at=created_at,
+                        image_path=random_filename,
+                        image_hash=image_hash,
+                    )
+            elif existing_image:
+            # Берём image_hash напрямую из текущего todo если image_path совпадает
+                if todo.image_path == existing_image:
+                    image_hash = todo.image_hash
+                else:
+                    # Ищем среди других todo
+                    data = await uow_session.todo.get_todo_by_image_path(existing_image)
+                    if data is None:
+                        raise NotFoundException(f"Image '{existing_image}' not found")
+                    image_hash = data.image_hash
+
+                if await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id) is None:
+                    await delete_image(todo.image_path)
+
+                todo_change = TodoSchema(
+                    title=title,
+                    details=details,
+                    completed=completed,
+                    tag=tag,
+                    created_at=created_at,
+                    image_path=existing_image,
+                    image_hash=image_hash,
+                )
+            else:
+                todo_change = TodoSchema(
+                    title=title,
+                    details=details,
+                    completed=completed,
+                    tag=tag,
+                    created_at=created_at,
+                    image_path=image_path,
+                    image_hash=todo.image_hash,
+                )
+
+            if todo_change.completed:
+                todo_change.completed_at = datetime.now(UTC)
+
+            todo_change.source = TodoSource(todo.source)
+
+            await uow_session.todo.update(
+                todo_id=todo_id, values=todo_change.model_dump(exclude={"id"})
+            )
+        try:
+            await uow_session.elastic.update_todo(todo_id, todo)
+        except Exception as e:
+            logger.error("Elastic update failed: %s", e)
+
+        return todo
 
     async def delete(self, uow_session: UnitOfWork, todo_id: int, user_id: int) -> None:
         """Удаление todo с проверкой владельца"""

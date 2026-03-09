@@ -10,7 +10,6 @@ from .base import Base
 class UserRole(str, enum.Enum):
     ADMIN = "admin"
     EDITOR = "editor"
-    VIEWER = "viewer"
 
 
 class User(Base):
@@ -23,7 +22,7 @@ class User(Base):
     last_name: Mapped[str] = mapped_column(String, nullable=False)
 
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole), default=UserRole.VIEWER, nullable=False
+        Enum(UserRole), default=UserRole.EDITOR, nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[DateTime] = mapped_column(

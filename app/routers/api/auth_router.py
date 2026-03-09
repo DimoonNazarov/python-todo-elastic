@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from typing import Annotated
 
 from app.dependencies import get_auth_service
-from app.exceptions import UserAlreadyExists, InactiveUserException, InvalidCredentials
+from app.exceptions import UserAlreadyExists, InactiveUserException, IncorrectEmailOrPasswordException
 from app.utils import OAuth2PasswordBearerWithCookie
 from app.schemas import User, SUserRegister, SUserAuth
 from app.core import get_async_uow_session, UnitOfWork
@@ -43,7 +43,7 @@ async def login(
             ip_address=ip_address,
             uow_session=uow_session,
         )
-    except InvalidCredentials:
+    except IncorrectEmailOrPasswordException:
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": "Incorrect username or password"},
