@@ -649,3 +649,46 @@ class ElasticRepository:
         except Exception as e:
             logger.error(f"Failed to get top words: {e}")
             return []
+
+    async def get_notes_per_day(self, days: int = 30) -> List[dict]:
+        """
+        Возвращает количество заметок по дням
+        :param days: количество дней для анализа
+        """
+        try:
+            # Вычисляем дату "от" (текущая дата минус указанное количество дней)
+            from datetime import datetime, timedelta
+
+            date_from = (datetime.now() - timedelta(days=days)).isoformat()
+
+            response = await self._client.search(
+                index=INDEX_NAME,
+                body={
+                    "size": 0,
+                    "query": {"range": {"created_at": {"gte": date_from}}},
+                    "aggs": {
+                        "notes_per_day": {
+                            "date_histogram": {
+                                "field": "created_at",
+                                "calendar_interval": "day",
+                                "format": "yyyy-MM-dd",
+                                "min_doc_count": 0,  # показывать даже дни с 0 заметок
+                            }
+                        }
+                    },
+                    "sort": [{"created_at": {"order": "asc"}}],
+                },
+            )
+
+            result = []
+            if "aggregations" in response:
+                for bucket in response["aggregations"]["notes_per_day"]["buckets"]:
+                    result.append(
+                        {"date": bucket["key_as_string"], "count": bucket["doc_count"]}
+                    )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to get notes per day: {e}")
+            return []

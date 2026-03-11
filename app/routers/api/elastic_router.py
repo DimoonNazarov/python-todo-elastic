@@ -42,7 +42,7 @@ async def search_page(request: Request):
     return templates.TemplateResponse("search.html", {"request": request})
 
 
-@elastic_router.post("/search/", response_class=HTMLResponse)
+@elastic_router.post("/search", response_class=HTMLResponse)
 async def search_todos(
     request: Request,
     query: str = Form(...),
@@ -102,3 +102,61 @@ async def search_by_top_words(
     except Exception as e:
         logger.error("Top words error: %s", e)
         return JSONResponse({"words": []})
+
+
+@elastic_router.get("/notes-per-day/", response_class=HTMLResponse)
+async def notes_per_day_chart(
+    request: Request,
+    days: int = 30,
+    uow_session: UnitOfWork = Depends(get_async_uow_session),
+):
+    """
+    Страница с графиком активности пользователей
+    """
+    try:
+        data = await uow_session.elastic.get_notes_per_day(days)
+
+        # Подготавливаем данные для графика
+        dates = [item["date"] for item in data]
+        counts = [item["count"] for item in data]
+
+        return templates.TemplateResponse(
+            "notes_per_day.html",
+            {
+                "request": request,
+                "dates": dates,
+                "counts": counts,
+                "days": days,
+                "total": sum(counts),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Notes per day error: {e}")
+        return templates.TemplateResponse(
+            "notes_per_day.html",
+            {
+                "request": request,
+                "dates": [],
+                "counts": [],
+                "days": days,
+                "total": 0,
+                "error": str(e),
+            },
+        )
+
+
+@elastic_router.get("/api/notes-per-day/")
+async def notes_per_day_api(
+    days: int = 30, uow_session: UnitOfWork = Depends(get_async_uow_session)
+):
+    """
+    API endpoint для получения данных в формате JSON
+    """
+    try:
+        data = await uow_session.elastic.get_notes_per_day(days)
+        return JSONResponse(
+            {"data": data, "total": sum(item["count"] for item in data), "days": days}
+        )
+    except Exception as e:
+        logger.error(f"Notes per day API error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
