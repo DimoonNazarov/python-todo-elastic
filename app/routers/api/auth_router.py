@@ -3,10 +3,6 @@ from fastapi import APIRouter, Depends, Request, Form, status, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
 from typing import Annotated
-import logging
-
-logger = logging.getLogger(__name__)
-
 from app.dependencies import get_auth_service
 from app.exceptions import (
     UserAlreadyExists,
@@ -107,17 +103,13 @@ async def logout(
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ):
     raw = request.cookies.get("refresh_token")
-    if raw:
-        try:
-            await uow_session.token.revoke_refresh_token(
-                raw.removeprefix("Bearer ").strip()
-            )
-        except Exception:
-            pass
+    refresh_token = extract_bearer_token(raw) if raw else None
+
+    await auth_service.logout(refresh_token=refresh_token, uow_session=uow_session)
 
     response = RedirectResponse("/auth/login", status_code=302)
     response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token", path="/auth")
+    response.delete_cookie("refresh_token", path="/")
     return response
 
 
@@ -152,15 +144,12 @@ async def refresh_and_redirect(
     request: Request,
     next: str = "/",
 ):
-    logger.info("refresh-and-redirect: next=%s", next)
-
     # Защита от open redirect
     parsed = urlparse(next)
     if parsed.netloc:
         next = "/"
 
     raw = request.cookies.get("refresh_token")
-    logger.info("refresh_token cookie: %s", raw[:20] + "..." if raw else "None")
     if not raw:
         raise InvalidCredentials("Refresh token missing")
 
@@ -174,14 +163,11 @@ async def refresh_and_redirect(
             uow_session=uow_session,
         )
     except Exception as e:
-        logger.error("Token refresh failed: %s", e)
         response = RedirectResponse("/auth/login", status_code=302)
         response.delete_cookie("access_token")
         response.delete_cookie("refresh_token", path="/auth")
         return response
 
-    logger.info("Tokens refreshed successfully, redirecting to %s", next)
-    # Единственное отличие от твоего /refresh — редирект вместо JSONResponse
     response = RedirectResponse(url=next, status_code=status.HTTP_303_SEE_OTHER)
     _set_auth_cookies(response, tokens)
     return response

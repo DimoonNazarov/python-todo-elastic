@@ -107,7 +107,6 @@ class AuthService:
                 await uow_session.token.revoke_refresh_token(
                     refresh_token=refresh_token
                 )
-            # если токена нет — просто ничего не делаем, cookie всё равно удалятся
 
     async def logout_all_devices(
         self,
