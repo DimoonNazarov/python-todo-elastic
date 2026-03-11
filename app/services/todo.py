@@ -233,13 +233,15 @@ class TodoService:
 
         return todo
 
-    async def delete(self, uow_session: UnitOfWork, todo_id: int, user_id: int) -> None:
+    async def delete(
+        self, uow_session: UnitOfWork, todo_id: int, current_user: SUserInfo
+    ) -> None:
         """Удаление todo с проверкой владельца"""
         async with uow_session.start():
             todo = await uow_session.todo.get_todo_by_id(todo_id=todo_id)
             if not todo:
                 raise NotFoundException(f"Todo with id {todo_id} not found")
-            if todo.author_id != user_id:
+            if todo.author_id != current_user.id and current_user.role != UserRole.ADMIN:
                 raise ForbiddenException("You can only delete your own todos")
 
             logger.info("Deleting todo: %s", todo)
@@ -258,7 +260,7 @@ class TodoService:
                 logger.error("Elastic delete failed: %s", e)
 
     async def delete_multiple(
-        self, uow_session: UnitOfWork, todo_ids: list[int], user_id: int
+        self, uow_session: UnitOfWork, todo_ids: list[int], current_user: SUserInfo
     ) -> None:
         """Удаление нескольких todo по списку идентификаторов с проверкой прав владельца"""
         async with uow_session.start():
@@ -266,9 +268,13 @@ class TodoService:
             if not todos:
                 raise NotFoundException(f"Todos with id {todo_ids} not found")
 
-            not_owned_ids = [todo.id for todo in todos if todo.author_id != user_id]
-            if not_owned_ids:
-                raise ForbiddenException("You can only delete your own todos")
+            # Проверка прав: только владелец или админ может удалять
+            if current_user.role != UserRole.ADMIN:
+                not_owned_ids = [
+                    todo.id for todo in todos if todo.author_id != current_user.id
+                ]
+                if not_owned_ids:
+                    raise ForbiddenException("You can only delete your own todos")
 
             image_paths_to_delete = []
             for todo in todos:
@@ -292,20 +298,24 @@ class TodoService:
                 except Exception as e:
                     logger.error("Elastic delete failed: %s", e)
 
-    async def delete_all_user_todos(self, uow_session: UnitOfWork, user_id: int) -> int:
+    async def delete_all_user_todos(
+        self, uow_session: UnitOfWork, current_user: SUserInfo
+    ) -> int:
         """
         Удаление всех todo пользователя
         Returns: количество удаленных записей
         """
         async with uow_session.start():
             user_todos = await uow_session.todo.get_todos_by_author_id(
-                author_id=user_id
+                author_id=current_user.id,
             )
             if not user_todos:
                 logger.info("No user todos found")
                 return 0
             logger.info(
-                "Deleting all todos for user %d, count: %d", user_id, len(user_todos)
+                "Deleting all todos for user %d, count: %d",
+                current_user.id,
+                len(user_todos),
             )
 
             todo_ids = [todo.id for todo in user_todos]
@@ -331,7 +341,7 @@ class TodoService:
                 except Exception as e:
                     logger.error(f"Failed to delete image {image_path}: {e}")
 
-            await uow_session.todo.delete_by_author_id(user_id)
+            await uow_session.todo.delete_by_author_id(current_user.id)
             for todo_id in todo_ids:
                 try:
                     await uow_session.elastic.delete_todo(todo_id=todo_id)

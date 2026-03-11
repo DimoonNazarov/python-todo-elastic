@@ -218,7 +218,7 @@ async def delete_todo(
     """Удаление задачи только ее владельцем"""
 
     await todo_service.delete(
-        uow_session=uow_session, todo_id=todo_id, user_id=current_user.id
+        uow_session=uow_session, todo_id=todo_id, current_user=current_user
     )
     return {
         "status": "success",
@@ -242,7 +242,7 @@ async def delete_todos(
 
     deleted_count = await todo_service.delete_all_user_todos(
         uow_session=uow_session,
-        user_id=current_user.id,
+        current_user=current_user,
     )
 
     return {
