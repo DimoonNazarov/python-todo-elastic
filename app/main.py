@@ -1,11 +1,11 @@
 """Main of todo app"""
 
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
+from app.core import setup_service_logging
 from app.core.database import get_es_client
 from app.exceptions import (
     NotFoundException,
@@ -15,24 +15,24 @@ from app.exceptions import (
     InvalidCredentials,
     InactiveUserException,
 )
-
 from app.repository.elastic_repository import ElasticRepository
 from app.routers import (
     todo_router,
     elastic_router,
-    auth_router,
-    not_found_handler,
-    invalid_page_handler,
-    forbidden_handler,
+    auth_router
 )
 from app.routers.exception_handlers import (
     invalid_credentials_handler,
     incorrect_email_or_password_handler,
     inactive_user_handler,
+    not_found_handler,
+    invalid_page_handler,
+    forbidden_handler,
 )
 from app.utils import create_dirs
 from app.middleware import JwtAuthMiddleware
 
+setup_service_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

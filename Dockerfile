@@ -3,8 +3,6 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-RUN apt-get update && apt-get install curl -y && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt /
 RUN pip3 install --no-cache -r /requirements.txt
 
