@@ -5,7 +5,6 @@ from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
 from typing import Annotated
 from app.dependencies import get_auth_service
 from app.exceptions import (
-    UserAlreadyExists,
     InvalidCredentials,
 )
 from app.utils import OAuth2PasswordBearerWithCookie, extract_bearer_token
@@ -84,14 +83,8 @@ async def register(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ):
-    try:
-        await auth_service.register_user(uow_session=uow_session, user_data=user_data)
-    except UserAlreadyExists:
-        return templates.TemplateResponse(
-            "register.html",
-            {"request": request, "error": "Username already registered"},
-            status_code=400,
-        )
+    await auth_service.register_user(uow_session=uow_session, user_data=user_data)
+
 
     return RedirectResponse(url="/auth/login", status_code=status.HTTP_303_SEE_OTHER)
 

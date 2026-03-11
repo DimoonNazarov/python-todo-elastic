@@ -9,7 +9,10 @@ from app.exceptions import (
     ForbiddenException,
     InvalidCredentials,
     InactiveUserException,
+    UserAlreadyExists,
 )
+
+templates = Jinja2Templates(directory="app/templates")
 
 
 async def not_found_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -26,12 +29,12 @@ async def invalid_page_handler(request: Request, exc: Exception) -> JSONResponse
     )
 
 
-async def incorrect_email_or_password_handler(request: Request, exc: Exception) -> HTMLResponse:
-    assert isinstance(exc, IncorrectEmailOrPasswordException)
+async def user_already_exists_handler(request: Request, exc: Exception) -> HTMLResponse:
+    assert isinstance(exc, UserAlreadyExists)
     return templates.TemplateResponse(
-        "login.html",
-        {"request": request, "error": "Incorrect username or password"},
-        status_code=400
+        "register.html",
+        {"request": request, "error": "Username already registered"},
+        status_code=400,
     )
 
 
@@ -49,34 +52,21 @@ async def invalid_credentials_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
-# async def inactive_user_handler(request: Request, exc: Exception) -> JSONResponse:
-#     assert isinstance(exc, InactiveUserException)
-#     return JSONResponse(
-#         status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)}
-#     )
-
-templates = Jinja2Templates(directory="app/templates")
-
-async def incorrect_email_or_password_handler(request: Request, exc: Exception) -> HTMLResponse:
+async def incorrect_email_or_password_handler(
+    request: Request, exc: Exception
+) -> HTMLResponse:
     """Глобальный обработчик для ошибок аутентификации - возвращает HTML"""
     assert isinstance(exc, IncorrectEmailOrPasswordException)
     return templates.TemplateResponse(
         "login.html",
-        {
-            "request": request,
-            "error": "Incorrect username or password"
-        },
-        status_code=400
+        {"request": request, "error": "Incorrect username or password"},
+        status_code=400,
     )
+
 
 async def inactive_user_handler(request: Request, exc: Exception) -> HTMLResponse:
     """Глобальный обработчик для неактивных пользователей - возвращает HTML"""
     assert isinstance(exc, InactiveUserException)
     return templates.TemplateResponse(
-        "login.html",
-        {
-            "request": request,
-            "error": "Inactive user"
-        },
-        status_code=403
+        "login.html", {"request": request, "error": "Inactive user"}, status_code=403
     )
