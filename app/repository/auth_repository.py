@@ -1,6 +1,4 @@
 from collections.abc import Sequence
-
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
 
@@ -71,8 +69,6 @@ class AuthRepository:
         result = await self._session.execute(query)
         return result.rowcount
 
-
-
     async def update_by_id(self, user_id: int, update_dict: dict) -> bool:
         """
         Обновить пользователя по ID
@@ -120,21 +116,6 @@ class AuthRepository:
         stmt = select(User.id).filter_by(**filter_dict).limit(1)
         result = await self._session.execute(stmt)
         return result.scalar() is not None
-
-    #
-    # async def get_users_by_role(self, role: UserRole) -> List["User"]:
-    #     """
-    #     Получить пользователей по роли
-    #
-    #     Args:
-    #         role: Роль пользователя
-    #
-    #     Returns:
-    #         Список пользователей с указанной ролью
-    #     """
-    #     logger.debug(f"Получение пользователей с ролью {role}")
-    #     return await self.find_all(SUserFilter(role=role))
-    #
 
     async def deactivate_user(self, user_id: int) -> bool:
         """Деактивировать пользователя по ID"""

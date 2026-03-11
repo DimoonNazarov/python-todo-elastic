@@ -8,12 +8,11 @@ from app.exceptions import (
     InvalidCredentials,
 )
 from app.utils import OAuth2PasswordBearerWithCookie, extract_bearer_token
-from app.schemas import User, SUserRegister, SUserAuth
+from app.schemas import SUserRegister, SUserAuth, SUserInfo, Token
 from app.core import get_async_uow_session, UnitOfWork
 from app.services import AuthService
-from app.routers.dependencies import get_current_user
+from app.routers.dependencies import get_current_user, get_current_active_user
 from app.config import settings
-from app.schemas import Token
 
 # pylint: disable=invalid-name
 templates = Jinja2Templates(directory="app/templates")
@@ -84,7 +83,6 @@ async def register(
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ):
     await auth_service.register_user(uow_session=uow_session, user_data=user_data)
-
 
     return RedirectResponse(url="/auth/login", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -168,6 +166,6 @@ async def refresh_and_redirect(
 
 @auth_router.get("/users/me")
 async def read_users_me(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
 ):
     return current_user

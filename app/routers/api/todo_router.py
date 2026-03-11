@@ -1,6 +1,5 @@
 import base64
 import logging
-import math
 import io
 from typing import Any
 import squarify
@@ -21,24 +20,18 @@ from fastapi import (
     Form,
 )
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from typing import Annotated
 
-from app.core import get_async_uow_session
+from app.core import get_async_uow_session, UnitOfWork
 from app.dependencies import get_todo_service
 from app.routers.dependencies import get_current_user, get_current_active_user
-from app.schemas import User, TodoSource, Todo, Tags, SUserInfo
+from app.schemas import TodoSource, Todo, Tags, SUserInfo
 from app.services.todo import TodoService
 from app.utils import (
-    generate_random_filename,
-    load_image,
-    delete_image,
-    hash_image,
     import_todos,
     export_todos,
 )
-from app.core import UnitOfWork
 
 todo_router = APIRouter(prefix="/todo", tags=["Todo"])
 
@@ -46,9 +39,6 @@ todo_router = APIRouter(prefix="/todo", tags=["Todo"])
 templates = Jinja2Templates(directory="app/templates")
 
 logger = logging.getLogger(__name__)
-
-
-# pylint: enable=invalid-name
 
 
 @todo_router.get("/home/", status_code=status.HTTP_200_OK)
@@ -124,7 +114,7 @@ async def add_todo(
         title,
         details,
         tag,
-        source
+        source,
     )
 
     await todo_service.create(

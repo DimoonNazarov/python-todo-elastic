@@ -1,4 +1,4 @@
-from .schemas import TodoSource, Todo, User, Tags
+from .schemas import TodoSource, Todo, Tags
 from .user import (
     UserRole,
     SUserAuth,
@@ -14,7 +14,6 @@ from .user import (
 __all__ = [
     "TodoSource",
     "Todo",
-    "User",
     "Tags",
     "UserRole",
     "SUserAuth",

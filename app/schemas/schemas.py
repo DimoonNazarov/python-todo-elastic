@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from pydantic import Field
 from typing import Optional
 
+
 class TodoSource(str, Enum):
     created = "Созданная"
     generated = "Сгенерированная"
@@ -17,7 +18,7 @@ class Tags(str, Enum):
 
 
 class Todo(BaseModel):
-    id: Optional[int] = Field(default=None, alias='id')
+    id: Optional[int] = Field(default=None, alias="id")
     title: str = Field(min_length=3, max_length=200, default="Задача")
     details: str = Field(max_length=500, default="Описание задачи")
     completed: bool = Field(default=False)
@@ -38,15 +39,8 @@ class Todo(BaseModel):
                     "tag": "Планы",
                     "created_at": "2023-10-01T00:00:00Z",
                     "completed_at": None,
-                    "source": "Созданная"
+                    "source": "Созданная",
                 }
             ]
         }
     }
-
-
-
-class User(BaseModel):
-    name: str = Field()
-    password: str = Field()
-    disabled: bool = Field()
