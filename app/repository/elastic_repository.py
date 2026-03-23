@@ -1,207 +1,96 @@
 from elasticsearch import AsyncElasticsearch, NotFoundError
 from typing import Optional, List
 import logging
-import re
-
-from app.models import Todo
+from app.services.search_index import ALL_STOPWORDS
+from app.services.search_index import CLASSIFICATION_REPLACEMENTS
 
 logger = logging.getLogger(__name__)
 
 INDEX_NAME = "todos"
-
-# Список грифов секретности для фильтрации
-SECRET_CLASSIFICATIONS = [
-    "секретно",
-    "совершенно секретно",
-    "особой важности",
-    "для служебного пользования",
-    "конфиденциально",
-]
-
-# Список стоп-слов русского языка
-RUSSIAN_STOPWORDS = [
-    "и",
-    "в",
-    "во",
-    "не",
-    "что",
-    "он",
-    "на",
-    "я",
-    "с",
-    "со",
-    "как",
-    "а",
-    "то",
-    "все",
-    "она",
-    "так",
-    "его",
-    "но",
-    "да",
-    "ты",
-    "к",
-    "у",
-    "же",
-    "вы",
-    "за",
-    "бы",
-    "по",
-    "только",
-    "ее",
-    "мне",
-    "было",
-    "вот",
-    "от",
-    "меня",
-    "еще",
-    "нет",
-    "о",
-    "из",
-    "ему",
-    "теперь",
-    "когда",
-    "даже",
-    "ну",
-    "вдруг",
-    "ли",
-    "если",
-    "уже",
-    "или",
-    "ни",
-    "быть",
-    "был",
-    "него",
-    "до",
-    "вас",
-    "нибудь",
-    "опять",
-    "уж",
-    "вам",
-    "ведь",
-    "там",
-    "потом",
-    "себя",
-    "ничего",
-    "ей",
-    "может",
-    "они",
-    "тут",
-    "где",
-    "есть",
-    "надо",
-    "ней",
-    "для",
-    "мы",
-    "тебя",
-    "их",
-    "чем",
-    "была",
-    "сам",
-    "чтоб",
-    "без",
-    "будто",
-    "чего",
-    "раз",
-    "тоже",
-    "себе",
-    "под",
-    "будет",
-    "ж",
-    "тогда",
-    "кто",
-    "этот",
-    "того",
-    "потому",
-    "этого",
-    "какой",
-    "совсем",
-    "ним",
-    "здесь",
-    "этом",
-    "один",
-    "почти",
-    "мой",
-    "тем",
-    "чтобы",
-    "нее",
-    "сейчас",
-    "были",
-    "куда",
-    "зачем",
-    "сказать",
-    "всех",
-    "никогда",
-    "сегодня",
-    "можно",
-    "при",
-    "наконец",
-    "два",
-    "об",
-    "другой",
-    "хоть",
-    "после",
-    "над",
-    "больше",
-    "тот",
-    "через",
-    "эти",
-    "нас",
-    "про",
-    "всего",
-    "них",
-    "какая",
-    "много",
-    "разве",
-    "три",
-    "эту",
-    "моя",
-    "впрочем",
-    "хорошо",
-    "свою",
-    "этой",
-    "перед",
-    "иногда",
-    "лучше",
-    "чуть",
-    "том",
-    "нельзя",
-    "такой",
-    "им",
-    "более",
-    "всегда",
-    "конечно",
-    "всю",
-    "между",
-]
-
-# Три имени из группы (замените на реальные имена вашей группы)
-GROUP_NAMES = ["Александр", "Екатерина", "Дмитрий"]
-
-# Объединяем стоп-слова с именами
-ALL_STOPWORDS = RUSSIAN_STOPWORDS + [name.lower() for name in GROUP_NAMES]
 
 
 def create_russian_analyzer_mapping():
     return {
         "settings": {
             "analysis": {
+                "char_filter": {
+                    # Порядок важен: сначала более длинные выражения, потом короткие.
+                    "classification_osoboy_vazhnosti": {
+                        "type": "pattern_replace",
+                        "pattern": "(?iu)\\bособой\\s+важности\\b",
+                        "replacement": CLASSIFICATION_REPLACEMENTS[
+                            "особой важности"
+                        ],
+                    },
+                    "classification_sovershenno_sekretno": {
+                        "type": "pattern_replace",
+                        "pattern": "(?iu)\\bсовершенно\\s+секретно\\b",
+                        "replacement": CLASSIFICATION_REPLACEMENTS[
+                            "совершенно секретно"
+                        ],
+                    },
+                    "classification_dsp_full": {
+                        "type": "pattern_replace",
+                        "pattern": "(?iu)\\bдля\\s+служебного\\s+пользования\\b",
+                        "replacement": CLASSIFICATION_REPLACEMENTS[
+                            "для служебного пользования"
+                        ],
+                    },
+                    "classification_konfidencialno": {
+                        "type": "pattern_replace",
+                        "pattern": "(?iu)\\bконфиденциально\\b",
+                        "replacement": CLASSIFICATION_REPLACEMENTS[
+                            "конфиденциально"
+                        ],
+                    },
+                    "classification_dsp_short": {
+                        "type": "pattern_replace",
+                        "pattern": "(?iu)\\bдсп\\b",
+                        "replacement": CLASSIFICATION_REPLACEMENTS["дсп"],
+                    },
+                    "classification_sekretno": {
+                        "type": "pattern_replace",
+                        "pattern": "(?iu)\\bсекретно\\b",
+                        "replacement": CLASSIFICATION_REPLACEMENTS["секретно"],
+                    },
+                },
                 "analyzer": {
-                    # Для поиска (со stemmer)
                     "russian_search_analyzer": {
                         "type": "custom",
+                        "char_filter": [
+                            "classification_osoboy_vazhnosti",
+                            "classification_sovershenno_sekretno",
+                            "classification_dsp_full",
+                            "classification_konfidencialno",
+                            "classification_dsp_short",
+                            "classification_sekretno",
+                        ],
                         "tokenizer": "standard",
-                        "filter": ["lowercase", "russian_stop", "russian_stemmer"],
+                        "filter": [
+                            "lowercase",
+                            "russian_stop_with_group_names",
+                            "russian_stemmer",
+                        ],
                     },
-                    # Для красивых топ-слов (БЕЗ stemmer)
                     "russian_agg_analyzer": {
                         "type": "custom",
+                        "char_filter": [
+                            "classification_osoboy_vazhnosti",
+                            "classification_sovershenno_sekretno",
+                            "classification_dsp_full",
+                            "classification_konfidencialno",
+                            "classification_dsp_short",
+                            "classification_sekretno",
+                        ],
                         "tokenizer": "standard",
-                        "filter": ["lowercase", "russian_stop"],
+                        "filter": ["lowercase", "russian_stop_with_group_names"],
                     },
                 },
                 "filter": {
-                    "russian_stop": {"type": "stop", "stopwords": "_russian_"},
+                    "russian_stop_with_group_names": {
+                        "type": "stop",
+                        "stopwords": ALL_STOPWORDS,
+                    },
                     "russian_stemmer": {"type": "stemmer", "language": "russian"},
                 },
             }
@@ -238,58 +127,17 @@ def create_russian_analyzer_mapping():
                 "completed": {"type": "boolean"},
                 "completed_at": {"type": "date"},
                 "classification_level": {"type": "keyword"},
-                "masked_title": {"type": "text"},
-                "masked_details": {"type": "text"},
+                "masked_title": {
+                    "type": "text",
+                    "analyzer": "russian_search_analyzer",
+                },
+                "masked_details": {
+                    "type": "text",
+                    "analyzer": "russian_search_analyzer",
+                },
             }
         },
     }
-
-
-def detect_classification(text: str) -> Optional[str]:
-    """Определяет уровень секретности текста"""
-    if not text:
-        return None
-
-    text_lower = text.lower()
-
-    # Проверяем в порядке убывания важности
-    if "особой важности" in text_lower:
-        return "особой важности"
-    elif "совершенно секретно" in text_lower:
-        return "совершенно секретно"
-    elif "секретно" in text_lower:
-        return "секретно"
-    elif "для служебного пользования" in text_lower or "дсп" in text_lower:
-        return "дсп"
-    elif "конфиденциально" in text_lower:
-        return "конфиденциально"
-
-    return None
-
-
-def mask_classification(text: str, classification: str) -> str:
-    """Заменяет грифы на соответствующие надписи"""
-    if not text:
-        return text
-
-    replacements = {
-        "секретно": "не интересно",
-        "совершенно секретно": "не интерессно",
-        "особой важности": "не интересссно",
-        "для служебного пользования": "не интересно",
-        "дсп": "не интересно",
-        "конфиденциально": "не интересно",
-    }
-
-    result = text
-    for secret, replacement in replacements.items():
-        if secret in result.lower():
-            # Заменяем с сохранением регистра первой буквы
-            pattern = re.compile(re.escape(secret), re.IGNORECASE)
-            result = pattern.sub(replacement, result)
-
-    return result
-
 
 class ElasticRepository:
     def __init__(self, client: AsyncElasticsearch):
@@ -303,85 +151,11 @@ class ElasticRepository:
             await self._client.indices.create(index=INDEX_NAME, body=mapping)
             logger.info("Index '%s' created with Russian analyzer.", INDEX_NAME)
 
-    async def index_todo(self, todo: Todo):
-        """Добавляет или обновляет документ задачи с учетом классификации."""
+    async def index_document(self, todo_id: int, document: dict):
+        """Индексирует уже подготовленный документ задачи."""
         try:
-            # Объединяем текст для определения классификации
-            full_text = f"{todo.title} {todo.details}" if todo.details else todo.title
-            classification = detect_classification(full_text)
-
-            # Подготавливаем документ
-            document = {
-                "todo_id": todo.id,
-                "title": todo.title,
-                "details": todo.details,
-                "tag": todo.tag,
-                "created_at": todo.created_at.isoformat() if todo.created_at else None,
-                "updated_at": (
-                    todo.updated_at.isoformat() if todo.updated_at else None
-                ),
-                "updated_by": todo.updated_by,
-                "completed": todo.completed,
-                "completed_at": (
-                    todo.completed_at.isoformat() if todo.completed_at else None
-                ),
-                "classification_level": classification,
-            }
-
-            # Если обнаружена классификация, добавляем замаскированные поля
-            if classification:
-                document["masked_title"] = mask_classification(
-                    todo.title, classification
-                )
-                document["masked_details"] = (
-                    mask_classification(todo.details, classification)
-                    if todo.details
-                    else None
-                )
-                logger.info(f"Todo {todo.id} has classification: {classification}")
-
-            await self._client.index(
-                index=INDEX_NAME, id=str(todo.id), document=document
-            )
-            logger.info(f"Successfully indexed todo {todo.id}")
-
-        except Exception as e:
-            logger.error("Failed to index todo %s: %s", todo.id, e)
-
-    async def update_todo(self, todo_id: int, todo: Todo):
-        """Частично обновляет документ задачи."""
-        try:
-            # Проверяем классификацию для обновленных полей
-            full_text = f"{todo.title} {todo.details}" if todo.details else todo.title
-            classification = detect_classification(full_text)
-
-            doc_update = {
-                "title": todo.title,
-                "details": todo.details,
-                "tag": todo.tag,
-                "completed": todo.completed,
-                "completed_at": (
-                    todo.completed_at.isoformat() if todo.completed_at else None
-                ),
-                "classification_level": classification,
-            }
-
-            # Добавляем замаскированные поля при необходимости
-            if classification:
-                doc_update["masked_title"] = mask_classification(
-                    todo.title, classification
-                )
-                doc_update["masked_details"] = (
-                    mask_classification(todo.details, classification)
-                    if todo.details
-                    else None
-                )
-
-            await self._client.update(index=INDEX_NAME, id=str(todo_id), doc=doc_update)
-            logger.info(f"Updated todo {todo_id} in index")
-
-        except NotFoundError:
-            logger.warning("Todo %s not found in index on update.", todo_id)
+            await self._client.index(index=INDEX_NAME, id=str(todo_id), document=document)
+            logger.info("Successfully indexed todo %s", todo_id)
 
         except Exception as e:
             logger.error("Failed to update todo %s in index: %s", todo_id, e)
