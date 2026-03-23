@@ -139,7 +139,7 @@
     
     function changeDays() {
         const days = document.getElementById('days').value;
-        window.location.href = `/elastic/notes-per-day/?days=${days}`;
+        window.location.href = `/todo/notes-per-day/?days=${days}`;
     }
     
     function refreshData() {
@@ -149,7 +149,7 @@
     // Функция для получения данных в формате JSON (опционально)
     async function fetchData(days) {
         try {
-            const response = await fetch(`/elastic/api/notes-per-day/?days=${days}`);
+            const response = await fetch(`/todo/api/notes-per-day/?days=${days}`);
             const data = await response.json();
             console.log('API Data:', data);
             return data;
