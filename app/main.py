@@ -18,7 +18,6 @@ from app.exceptions import (
 from app.repository.elastic_repository import ElasticRepository
 from app.routers import (
     todo_router,
-    elastic_router,
     auth_router
 )
 from app.routers.exception_handlers import (
@@ -47,7 +46,7 @@ async def lifespan(app: FastAPI):
     await close_es_client()
 
 
-app = FastAPI(lifespan=lifespan, redirect_slashes=False)
+app = FastAPI(lifespan=lifespan, redirect_slashes=True)
 app.add_middleware(JwtAuthMiddleware)
 
 
@@ -58,7 +57,6 @@ async def main_page():
 
 app.include_router(todo_router)
 app.include_router(auth_router)
-app.include_router(elastic_router)
 
 create_dirs()
 

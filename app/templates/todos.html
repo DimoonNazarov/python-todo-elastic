@@ -4,6 +4,60 @@
 
 <h2 class="h2">Задачи</h2>
 
+<div class="card mt-3 mb-3">
+    <div class="card-header">
+        <h3 class="h5 mb-0">Поиск и аналитика</h3>
+    </div>
+    <div class="card-body">
+        <form action="/todo/search/" method="post" class="mb-3">
+            <div class="input-group">
+                <input type="text"
+                       name="query"
+                       class="form-control"
+                       placeholder="Введите поисковый запрос..."
+                       value="{{ search_query or '' }}"
+                       required>
+                <button type="submit" class="btn btn-primary">Поиск</button>
+            </div>
+        </form>
+
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <a href="/todo/list/?search_tag=Планы" class="btn btn-sm btn-outline-primary">Планы</a>
+            <a href="/todo/list/?search_tag=Учёба" class="btn btn-sm btn-outline-success">Учёба</a>
+            <a href="/todo/list/?search_tag=Личное" class="btn btn-sm btn-outline-warning">Личное</a>
+            <a href="/todo/list/" class="btn btn-sm btn-outline-secondary">Обычный список</a>
+        </div>
+
+        <form action="/todo/search/date/" method="get" class="mb-3">
+            <div class="input-group">
+                <input type="datetime-local"
+                       name="date_from"
+                       class="form-control"
+                       value="{{ search_date_from or '' }}"
+                       required>
+                <button type="submit" class="btn btn-outline-secondary">Найти по дате</button>
+            </div>
+        </form>
+
+        <div class="mb-2">
+            <button id="topWordsBtn" class="btn btn-outline-dark btn-sm">
+                Показать 10 популярных слов
+            </button>
+        </div>
+
+        <div id="topWordsContainer" class="mt-2" style="display: none;">
+            <h6 class="text-muted">Топ слов из Elasticsearch:</h6>
+            <div id="topWordsList" class="d-flex flex-wrap gap-2 mt-2"></div>
+        </div>
+
+        {% if subtitle %}
+        <div class="alert alert-info mt-3 mb-0">
+            {{ subtitle }}. Найдено: <strong>{{ todos|length }}</strong>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
 <div class="accordion" id="accordionFilters">
     <div class="accordion-item">
         <h2 class="accordion-header">
@@ -141,9 +195,9 @@
         {% endif %}
 
         {% if todo.completed %}
-        <strike>{{ todo.title }}</strike>
+        <strike>{{ todo.display_title or todo.title }}</strike>
         {% else %}
-        <span>{{ todo.title }}</span>
+        <span>{{ todo.display_title or todo.title }}</span>
         {% endif %}
 
         <div style="color: dodgerblue">
@@ -168,8 +222,13 @@
     {% endfor %}
 </ul>
 
+{% if not todos %}
+<div class="alert alert-info mt-3">Ничего не найдено.</div>
+{% endif %}
+
 <div class="d-flex justify-content-between align-items-center">
 
+    {% if not is_search_result %}
     <nav>
         <ul class="pagination">
             {% for i in range(pages) %}
@@ -182,6 +241,9 @@
             {% endfor %}
         </ul>
     </nav>
+    {% else %}
+    <div></div>
+    {% endif %}
 
     <div class="dropdown">
         <button class="btn btn-danger dropdown-toggle px-4" type="button" onclick="toggleDeleteOptions()">
@@ -225,6 +287,47 @@
 </div>
 
 <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const btn = document.getElementById("topWordsBtn");
+        const container = document.getElementById("topWordsContainer");
+        const list = document.getElementById("topWordsList");
+
+        btn.addEventListener("click", async function() {
+            btn.disabled = true;
+            btn.innerText = "Загрузка...";
+
+            try {
+                const response = await fetchWithAuth("/todo/search/top-words/?limit=10");
+                const data = await response.json();
+
+                list.innerHTML = "";
+
+                if (data.words.length === 0) {
+                    list.innerHTML = "<span class='text-muted'>Нет данных</span>";
+                } else {
+                    data.words.forEach(item => {
+                        const badge = document.createElement("span");
+                        badge.className = "badge bg-primary p-2";
+                        badge.style.cursor = "pointer";
+                        badge.innerText = `${item.word} (${item.count})`;
+                        badge.onclick = function() {
+                            const form = document.querySelector('form[action="/todo/search/"]');
+                            form.querySelector('[name=query]').value = item.word;
+                        };
+                        list.appendChild(badge);
+                    });
+                }
+
+                container.style.display = "block";
+            } catch (e) {
+                list.innerHTML = "<span class='text-danger'>Ошибка загрузки</span>";
+                container.style.display = "block";
+            }
+
+            btn.disabled = false;
+            btn.innerText = "Показать 10 популярных слов";
+        });
+    });
 
     document.querySelectorAll('.deleteButton').forEach(button => {
         button.addEventListener('click', function (e) {
