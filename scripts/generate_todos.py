@@ -1,21 +1,17 @@
-"""
-Скрипт генерации случайных тудушек.
-Вызывает POST /todo/add/ для создания 20 тудушек со случайными данными.
+"""Генератор 20 случайных todo через HTTP API приложения."""
 
-Запуск:
-    python generate_todos.py                                # локально
-    docker exec app python /code/scripts/generate_todos.py  # через Docker
-"""
-
+import os
 import random
 import sys
-import http.client
-import urllib.parse
-from urllib.parse import urlparse
 
-BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000"
+import requests
+
+BASE_URL = sys.argv[1] if len(sys.argv) > 1 else os.getenv("TODO_BASE_URL", "http://localhost:8000")
+LOGIN_PATH = "/auth/token"
 ADD_PATH = "/todo/add/"
 COUNT = 20
+EMAIL = os.getenv("TODO_GENERATOR_EMAIL")
+PASSWORD = os.getenv("TODO_GENERATOR_PASSWORD")
 
 TITLES = [
     "Купить продукты", "Сделать домашнее задание", "Позвонить маме",
@@ -44,7 +40,7 @@ DETAILS = [
 ]
 
 TAGS = ["Учёба", "Личное", "Планы"]
-SOURCES = ["Созданная"]
+SOURCES = ["Сгенерированная"]
 
 
 def generate_todo() -> dict:
@@ -58,10 +54,37 @@ def generate_todo() -> dict:
     }
 
 
+def _build_session() -> requests.Session:
+    if not EMAIL or not PASSWORD:
+        raise SystemExit(
+            "Нужно задать TODO_GENERATOR_EMAIL и TODO_GENERATOR_PASSWORD."
+        )
+
+    session = requests.Session()
+    response = session.post(
+        f"{BASE_URL}{LOGIN_PATH}",
+        json={"email": EMAIL, "password": PASSWORD},
+        allow_redirects=False,
+        timeout=15,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(
+            "Не удалось войти перед генерацией todo. "
+            f"Статус: {response.status_code}. Ответ сервера: {response.text}"
+        )
+
+    if "access_token" not in session.cookies:
+        raise RuntimeError("Не удалось получить access_token cookie после логина.")
+
+    return session
+
+
 def main():
-    parsed = urlparse(BASE_URL)
-    host = parsed.hostname
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        session = _build_session()
+    except Exception as e:
+        print(f"Ошибка авторизации: {e}")
+        return
 
     print(f"Генерация {COUNT} тудушек на {BASE_URL}{ADD_PATH}...")
     success = 0
@@ -69,44 +92,33 @@ def main():
 
     for i in range(1, COUNT + 1):
         todo = generate_todo()
-        body = urllib.parse.urlencode(todo).encode("utf-8")
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Content-Length": str(len(body)),
-        }
-
-        conn = None
         try:
-            if parsed.scheme == "https":
-                conn = http.client.HTTPSConnection(host, port, timeout=10)
-            else:
-                conn = http.client.HTTPConnection(host, port, timeout=10)
+            response = session.post(
+                f"{BASE_URL}{ADD_PATH}",
+                data=todo,
+                timeout=15,
+            )
 
-            conn.request("POST", ADD_PATH, body=body, headers=headers)
-            response = conn.getresponse()
-            response_body = response.read().decode("utf-8", errors="replace")
-
-            if response.status == 201:
+            if response.status_code == 201:
                 print(f"  [{i:02d}] ✅ Создана: {todo['title']}")
                 success += 1
             else:
-                print(f"  [{i:02d}] ❌ Ошибка {response.status}: {todo['title']} — {response_body}")
+                print(
+                    f"  [{i:02d}] ❌ Ошибка {response.status_code}: "
+                    f"{todo['title']} — {response.text}"
+                )
                 failed += 1
-
-        except ConnectionRefusedError:
+        except requests.Timeout:
+            print(f"  [{i:02d}] ❌ Таймаут запроса для: {todo['title']}")
+            failed += 1
+        except requests.ConnectionError:
             print(f"  [{i:02d}] ❌ Нет соединения с {BASE_URL}")
             failed += 1
             break
-        except TimeoutError:
-            print(f"  [{i:02d}] ❌ Таймаут запроса для: {todo['title']}")
-            failed += 1
-        except OSError as e:
+        except requests.RequestException as e:
             print(f"  [{i:02d}] ❌ Ошибка сети: {e}")
             failed += 1
             break
-        finally:
-            if conn:
-                conn.close()
 
     print(f"\nГотово: {success} создано, {failed} ошибок.")
 
