@@ -309,7 +309,7 @@ class TodoService:
 
     async def delete(
         self, uow_session: UnitOfWork, todo_id: int, current_user: SUserInfo
-    ) -> None:
+    ) -> TodoORM:
         """Удаление todo с проверкой владельца"""
         async with uow_session.start():
             todo = await uow_session.todo.get_todo_by_id(todo_id=todo_id)
@@ -332,6 +332,7 @@ class TodoService:
                 await uow_session.elastic.delete_todo(todo_id)
             except Exception as e:
                 logger.error("Elastic delete failed: %s", e)
+            return todo
 
     async def generate_random_todos(
         self,

@@ -4,6 +4,8 @@
 
 <h2 class="h2">Задачи</h2>
 
+<div id="todoActionMessage" class="alert alert-success d-none mt-2" role="alert"></div>
+
 <div class="card mt-3 mb-3">
     <div class="card-header">
         <h3 class="h5 mb-0">Поиск и аналитика</h3>
@@ -216,7 +218,9 @@
         <div class="btn-group">
             <a class="btn btn-success"
                href="/todo/edit/{{ todo.id }}/?limit={{ limit }}&skip={{ page }}">Редактировать</a>
-            <button class="btn btn-danger deleteButton" href="#" data-todo-id="{{ todo.id }}">Удалить</button>
+            <button class="btn btn-danger deleteButton" href="#"
+                    data-todo-id="{{ todo.id }}"
+                    data-todo-title="{{ todo.title }}">Удалить</button>
         </div>
     </li>
     {% endfor %}
@@ -287,6 +291,41 @@
 </div>
 
 <script>
+    const todoActionMessage = document.getElementById('todoActionMessage');
+    let todoActionMessageTimer = null;
+
+    function showTodoActionMessage(text, kind = 'success') {
+        if (todoActionMessageTimer) {
+            clearTimeout(todoActionMessageTimer);
+        }
+
+        todoActionMessage.className = `alert alert-${kind} mt-2`;
+        todoActionMessage.textContent = text;
+        todoActionMessage.classList.remove('d-none');
+
+        todoActionMessageTimer = setTimeout(() => {
+            todoActionMessage.classList.add('d-none');
+            todoActionMessage.textContent = '';
+            todoActionMessageTimer = null;
+        }, 7000);
+    }
+
+    function persistTodoActionMessage(text, kind = 'success') {
+        sessionStorage.setItem('todoActionMessage', JSON.stringify({ text, kind }));
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const storedMessage = sessionStorage.getItem('todoActionMessage');
+        if (storedMessage) {
+            try {
+                const parsed = JSON.parse(storedMessage);
+                showTodoActionMessage(parsed.text, parsed.kind);
+            } finally {
+                sessionStorage.removeItem('todoActionMessage');
+            }
+        }
+    });
+
     document.addEventListener('DOMContentLoaded', function() {
         const btn = document.getElementById("topWordsBtn");
         const container = document.getElementById("topWordsContainer");
@@ -332,6 +371,7 @@
     document.querySelectorAll('.deleteButton').forEach(button => {
         button.addEventListener('click', function (e) {
             const todoId = this.dataset.todoId;
+            const todoTitle = this.dataset.todoTitle;
 
             const action = () => {
                 fetchWithAuth(`/todo/delete/${todoId}/`, {
@@ -339,12 +379,14 @@
                 })
                     .then(res => res.json())
                     .then(data => {
-                        console.log('Успешно:', data);
+                        persistTodoActionMessage(
+                            `Тудушка "${data.deleted_todo_title}" удалена для пользователя ${data.deleted_for_user_email}.`
+                        );
                         window.location.href = window.location.href.toString();
                     })
                     .catch(error => console.error('Ошибка:', error))
             };
-            closeShowModal(action)
+            closeShowModal(action, `Вы уверены, что хотите удалить "${todoTitle}"?`)
         });
     });
 
@@ -407,6 +449,11 @@
                 method: 'DELETE'
             })
                 .then(res => res.json())
+                .then(data => {
+                    persistTodoActionMessage(
+                        `Удалено ${data.deleted_count} тудушек для пользователя ${data.deleted_for_user_email}.`
+                    );
+                })
                 .catch(error => console.error('Ошибка:', error));
 
             setTimeout(() => {

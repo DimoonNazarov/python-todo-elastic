@@ -24,19 +24,46 @@ async function refreshAccessToken() {
  * fetch с автоматическим обновлением токена при 401.
  * Используй вместо обычного fetch() везде, где нужна авторизация.
  */
+function cloneRequestBody(body) {
+    if (!body) {
+        return body;
+    }
+
+    if (body instanceof FormData) {
+        const cloned = new FormData();
+        for (const [key, value] of body.entries()) {
+            cloned.append(key, value);
+        }
+        return cloned;
+    }
+
+    if (body instanceof URLSearchParams) {
+        return new URLSearchParams(body.toString());
+    }
+
+    if (typeof body === 'string') {
+        return body;
+    }
+
+    return body;
+}
+
 async function fetchWithAuth(url, options = {}) {
-    let response = await fetch(url, {
+    const requestOptions = {
         ...options,
+        body: cloneRequestBody(options.body),
         credentials: 'same-origin'
-    });
+    };
+
+    let response = await fetch(url, requestOptions);
 
     if (response.status === 401) {
         const refreshed = await refreshAccessToken();
 
         if (refreshed) {
-            // Повторяем оригинальный запрос с обновлёнными куками
             response = await fetch(url, {
                 ...options,
+                body: cloneRequestBody(options.body),
                 credentials: 'same-origin'
             });
         }

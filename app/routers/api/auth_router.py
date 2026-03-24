@@ -1,5 +1,5 @@
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, Request, Form, status, Response
+from fastapi import APIRouter, Depends, Request, status, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
 from typing import Annotated
@@ -169,3 +169,29 @@ async def read_users_me(
     current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
 ):
     return current_user
+
+
+@auth_router.get("/users/active")
+async def read_active_users(
+    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+):
+    async with uow_session.start():
+        users = sorted(
+            await uow_session.auth.get_active_users(),
+            key=lambda user: (
+                user.first_name.lower(),
+                user.last_name.lower(),
+                user.email.lower(),
+            ),
+        )
+
+    return [
+        {
+            "id": user.id,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "role": user.role.value,
+        }
+        for user in users
+    ]

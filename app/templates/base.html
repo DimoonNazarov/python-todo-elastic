@@ -7,6 +7,254 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ToDo App</title>
     <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}">
+    <style>
+        .app-shell {
+            padding-top: 24px;
+            padding-bottom: 24px;
+        }
+
+        .app-topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .app-title {
+            margin: 0;
+        }
+
+        .user-menu {
+            position: relative;
+            margin-left: auto;
+        }
+
+        .user-menu-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid #d7deea;
+            border-radius: 999px;
+            background: #ffffff;
+            padding: 8px 14px 8px 10px;
+            box-shadow: 0 8px 24px rgba(18, 38, 63, 0.08);
+            cursor: pointer;
+            transition: box-shadow 0.2s ease, transform 0.2s ease;
+        }
+
+        .user-menu-button:hover {
+            box-shadow: 0 12px 28px rgba(18, 38, 63, 0.12);
+            transform: translateY(-1px);
+        }
+
+        .user-menu-button:focus-visible {
+            outline: 2px solid #0d6efd;
+            outline-offset: 2px;
+        }
+
+        .user-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1f8f55, #1665d8);
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .user-meta {
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+            line-height: 1.2;
+        }
+
+        .user-meta-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #172b4d;
+        }
+
+        .user-meta-email {
+            font-size: 12px;
+            color: #6b778c;
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .user-menu-caret {
+            font-size: 12px;
+            color: #6b778c;
+        }
+
+        .user-menu-panel {
+            position: absolute;
+            top: calc(100% + 12px);
+            right: 0;
+            width: 360px;
+            max-width: min(360px, calc(100vw - 24px));
+            background: #ffffff;
+            border: 1px solid #dfe5ef;
+            border-radius: 20px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
+            padding: 18px;
+            z-index: 50;
+            display: none;
+        }
+
+        .user-menu-panel.is-open {
+            display: block;
+        }
+
+        .user-menu-header {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid #eef2f7;
+        }
+
+        .user-menu-header .user-avatar {
+            width: 46px;
+            height: 46px;
+            font-size: 16px;
+        }
+
+        .user-menu-role {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            align-self: flex-start;
+            margin-top: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #edf4ff;
+            color: #2459d3;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .user-menu-section-title {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #7a869a;
+            margin-bottom: 10px;
+        }
+
+        .user-menu-actions,
+        .user-switch-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .user-menu-link,
+        .user-switch-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            width: 100%;
+            border: 1px solid #e7ecf3;
+            border-radius: 14px;
+            background: #f8fafc;
+            padding: 10px 12px;
+            color: #1f2937;
+            text-decoration: none;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+
+        .user-menu-link:hover,
+        .user-switch-link:hover {
+            background: #eef4ff;
+            border-color: #cfe0ff;
+            color: #0f3ea8;
+        }
+
+        .user-switch-link.is-current {
+            background: #eefbf3;
+            border-color: #b8e2c8;
+        }
+
+        .user-switch-link.is-current:hover {
+            color: #1f2937;
+        }
+
+        .user-switch-main {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .user-switch-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: inherit;
+        }
+
+        .user-switch-email {
+            font-size: 12px;
+            color: #6b778c;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .user-switch-badge {
+            flex-shrink: 0;
+            border-radius: 999px;
+            padding: 4px 8px;
+            background: #ffffff;
+            border: 1px solid #d7deea;
+            font-size: 11px;
+            font-weight: 600;
+            color: #4b5563;
+        }
+
+        .user-menu-empty {
+            margin: 0;
+            color: #6b778c;
+            font-size: 13px;
+        }
+
+        @media (max-width: 768px) {
+            body.container {
+                max-width: 100%;
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+
+            .app-topbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .user-menu {
+                width: 100%;
+            }
+
+            .user-menu-button {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .user-menu-panel {
+                left: 0;
+                right: 0;
+                width: 100%;
+                max-width: 100%;
+            }
+        }
+    </style>
 </head>
 
 <body class="container">
@@ -27,9 +275,55 @@
 </div>
 
 
-<main class="d-flex flex-column gap-3">
-    <h1 class="h1"><a href="/todo/home/" style="cursor: pointer; color: black; text-decoration: none;">ToDo</a> - список
-        задач</h1>
+<main class="app-shell d-flex flex-column gap-3">
+    <div class="app-topbar">
+        <h1 class="h1 app-title"><a href="/todo/home/" style="cursor: pointer; color: black; text-decoration: none;">ToDo</a> - список
+            задач</h1>
+
+        <div class="user-menu">
+            <button
+                type="button"
+                id="userMenuButton"
+                class="user-menu-button"
+                aria-expanded="false"
+                aria-controls="userMenuPanel"
+            >
+                <span id="userMenuAvatar" class="user-avatar">...</span>
+                <span class="user-meta">
+                    <span id="userMenuName" class="user-meta-name">Загрузка пользователя...</span>
+                    <span id="userMenuEmail" class="user-meta-email">Проверяем текущую сессию</span>
+                </span>
+                <span class="user-menu-caret">▾</span>
+            </button>
+
+            <div id="userMenuPanel" class="user-menu-panel" role="menu" aria-hidden="true">
+                <div class="user-menu-header">
+                    <span id="userMenuPanelAvatar" class="user-avatar">...</span>
+                    <div class="d-flex flex-column min-w-0">
+                        <strong id="userMenuPanelName" class="user-meta-name">Загрузка...</strong>
+                        <span id="userMenuPanelEmail" class="user-meta-email">Проверяем пользователя</span>
+                        <span id="userMenuPanelRole" class="user-menu-role">Роль неизвестна</span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="user-menu-section-title">Действия</div>
+                    <div class="user-menu-actions">
+                        <a class="user-menu-link" href="/auth/login" role="menuitem">Войти под другим пользователем</a>
+                        <a class="user-menu-link" href="/auth/register" role="menuitem">Создать пользователя</a>
+                        <a class="user-menu-link" href="/auth/logout" role="menuitem">Выйти из текущей сессии</a>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="user-menu-section-title">Быстрый выбор пользователя</div>
+                    <div id="userSwitchList" class="user-switch-list">
+                        <p class="user-menu-empty">Загружаем список активных пользователей...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     {% block content %}
 
@@ -66,16 +360,157 @@
             <li class="nav-item">
                 <a class="nav-link small" href="/todo/info-tasks/">Информация</a>
             </li>
-            <li class="nav-item">
-                <a class="nav-link small" href="/auth/logout">Выйти</a>
-            </li>
         </ul>
     </nav>
 </footer>
 
 <!-- Подключаем JS в правильном порядке -->
-<script src="{{ url_for('static', path='js/auth.js') }}"></script>
-<script src="{{ url_for('static', path='js/modal.js') }}"></script>
+<script src="{{ url_for('static', path='js/auth.js') }}?v=20260324-1"></script>
+<script src="{{ url_for('static', path='js/modal.js') }}?v=20260324-1"></script>
+<script>
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    function getUserInitials(user) {
+        const firstName = user?.first_name?.trim() || '';
+        const lastName = user?.last_name?.trim() || '';
+        const initials = `${firstName[0] || ''}${lastName[0] || ''}`.trim();
+        if (initials) {
+            return initials.toUpperCase();
+        }
+        const email = user?.email || '';
+        return (email.slice(0, 2) || 'U').toUpperCase();
+    }
+
+    function formatRoleLabel(role) {
+        if (role === 'admin') {
+            return 'Администратор';
+        }
+        if (role === 'editor') {
+            return 'Редактор';
+        }
+        return 'Роль не указана';
+    }
+
+    function fillUserWidget(user) {
+        const displayName = `${user.first_name} ${user.last_name}`.trim();
+        const initials = getUserInitials(user);
+
+        document.getElementById('userMenuAvatar').textContent = initials;
+        document.getElementById('userMenuPanelAvatar').textContent = initials;
+        document.getElementById('userMenuName').textContent = displayName;
+        document.getElementById('userMenuPanelName').textContent = displayName;
+        document.getElementById('userMenuEmail').textContent = user.email;
+        document.getElementById('userMenuPanelEmail').textContent = user.email;
+        document.getElementById('userMenuPanelRole').textContent = formatRoleLabel(user.role);
+    }
+
+    function renderSwitchUsers(users, currentUser) {
+        const list = document.getElementById('userSwitchList');
+
+        if (!Array.isArray(users) || users.length === 0) {
+            list.innerHTML = '<p class="user-menu-empty">Активные пользователи пока не найдены.</p>';
+            return;
+        }
+
+        list.innerHTML = users.map((user) => {
+            const displayName = escapeHtml(`${user.first_name} ${user.last_name}`.trim());
+            const email = escapeHtml(user.email);
+            const isCurrent = currentUser && user.id === currentUser.id;
+            const href = isCurrent
+                ? '#'
+                : `/auth/login?email=${encodeURIComponent(user.email)}`;
+
+            return `
+                <a class="user-switch-link ${isCurrent ? 'is-current' : ''}" href="${href}" ${isCurrent ? 'aria-current="true"' : ''}>
+                    <span class="user-switch-main">
+                        <span class="user-switch-name">${displayName}</span>
+                        <span class="user-switch-email">${email}</span>
+                    </span>
+                    <span class="user-switch-badge">${isCurrent ? 'Текущий' : 'Выбрать'}</span>
+                </a>
+            `;
+        }).join('');
+    }
+
+    function openUserMenu() {
+        const button = document.getElementById('userMenuButton');
+        const panel = document.getElementById('userMenuPanel');
+        panel.classList.add('is-open');
+        panel.setAttribute('aria-hidden', 'false');
+        button.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeUserMenu() {
+        const button = document.getElementById('userMenuButton');
+        const panel = document.getElementById('userMenuPanel');
+        panel.classList.remove('is-open');
+        panel.setAttribute('aria-hidden', 'true');
+        button.setAttribute('aria-expanded', 'false');
+    }
+
+    async function loadUserMenu() {
+        try {
+            const [currentUserResponse, activeUsersResponse] = await Promise.all([
+                fetchWithAuth('/auth/users/me'),
+                fetchWithAuth('/auth/users/active'),
+            ]);
+
+            if (!currentUserResponse.ok) {
+                throw new Error('Не удалось загрузить текущего пользователя');
+            }
+
+            const currentUser = await currentUserResponse.json();
+            fillUserWidget(currentUser);
+
+            if (activeUsersResponse.ok) {
+                const activeUsers = await activeUsersResponse.json();
+                renderSwitchUsers(activeUsers, currentUser);
+            } else {
+                renderSwitchUsers([], currentUser);
+            }
+        } catch (error) {
+            console.error('Не удалось инициализировать пользовательское меню:', error);
+            document.getElementById('userMenuName').textContent = 'Пользователь недоступен';
+            document.getElementById('userMenuEmail').textContent = 'Попробуйте обновить страницу';
+            document.getElementById('userMenuPanelName').textContent = 'Пользователь недоступен';
+            document.getElementById('userMenuPanelEmail').textContent = 'Попробуйте обновить страницу';
+            document.getElementById('userSwitchList').innerHTML =
+                '<p class="user-menu-empty">Не удалось загрузить список пользователей.</p>';
+        }
+    }
+
+    const userMenuButton = document.getElementById('userMenuButton');
+    const userMenuPanel = document.getElementById('userMenuPanel');
+
+    userMenuButton.addEventListener('click', () => {
+        if (userMenuPanel.classList.contains('is-open')) {
+            closeUserMenu();
+            return;
+        }
+        openUserMenu();
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!userMenuPanel.contains(event.target) && !userMenuButton.contains(event.target)) {
+            closeUserMenu();
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeUserMenu();
+        }
+    });
+
+    loadUserMenu();
+</script>
 
 </body>
 </html>

@@ -29,8 +29,7 @@ async def close_es_client():
 
 engine = create_async_engine(get_db_url())
 async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
-uow = UnitOfWork(async_session_maker, get_es_client())
 
 
 async def get_async_uow_session() -> AsyncGenerator[UnitOfWork, None]:
-    yield uow
+    yield UnitOfWork(async_session_maker, get_es_client())

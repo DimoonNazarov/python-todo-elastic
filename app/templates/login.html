@@ -174,6 +174,7 @@
                     name="email"
                     class="input"
                     placeholder="Email"
+                    value="{{ request.query_params.get('email', '') }}"
                     required
                 >
                 <div id="emailError" class="field-error"></div>

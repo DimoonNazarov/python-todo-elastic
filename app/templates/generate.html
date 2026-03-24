@@ -2,34 +2,125 @@
 
 {% block content %}
 
-<form id="todoForm" class="d-flex flex-column gap-2">
-    <div class="form-floating">
-        <input type="number" class="form-control" id="count" name="count"
-               placeholder="Введите количество todo" required min="1" max="200">
-        <label for="count">Введите количество todo</label>
+<div class="card mt-3">
+    <div class="card-header">
+        <h2 class="h4 mb-0">Генерация случайных задач</h2>
     </div>
+    <div class="card-body d-flex flex-column gap-3">
+        <p class="text-muted mb-0">
+            Укажите, сколько случайных тудушек нужно создать. Задачи будут добавлены от имени текущего пользователя.
+        </p>
 
+        <div id="statusBox" class="alert alert-secondary d-none mb-0" role="alert">
+            <div class="fw-semibold" id="statusTitle">Готово к запуску</div>
+            <div id="statusText" class="small mt-1">Введите количество задач и нажмите кнопку генерации.</div>
+        </div>
 
-    <button type="submit" class="btn btn-success">Сгенерировать</button>
-</form>
+        <form id="todoForm" class="d-flex flex-column gap-3">
+            <div class="form-floating">
+                <input type="number" class="form-control" id="count" name="count"
+                       placeholder="Введите количество todo" required min="1" max="200" value="20">
+                <label for="count">Введите количество todo</label>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" id="generateBtn" class="btn btn-success">Сгенерировать</button>
+                <a href="/todo/list/" class="btn btn-outline-secondary">К списку задач</a>
+            </div>
+        </form>
+
+        <div id="resultBox" class="card border-success d-none">
+            <div class="card-body">
+                <div class="fw-semibold text-success" id="resultTitle">Генерация завершена</div>
+                <div id="resultText" class="small text-muted mt-1"></div>
+                <div class="d-flex gap-2 mt-3">
+                    <a href="/todo/list/" class="btn btn-sm btn-success">Посмотреть задачи</a>
+                    <button id="repeatBtn" type="button" class="btn btn-sm btn-outline-success">Сгенерировать ещё</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 <script>
-    document.getElementById('todoForm').addEventListener('submit', function (e) {
+    const form = document.getElementById('todoForm');
+    const countInput = document.getElementById('count');
+    const generateBtn = document.getElementById('generateBtn');
+    const statusBox = document.getElementById('statusBox');
+    const statusTitle = document.getElementById('statusTitle');
+    const statusText = document.getElementById('statusText');
+    const resultBox = document.getElementById('resultBox');
+    const resultText = document.getElementById('resultText');
+    const repeatBtn = document.getElementById('repeatBtn');
+
+    function setStatus(kind, title, text) {
+        statusBox.className = `alert alert-${kind} mb-0`;
+        statusBox.classList.remove('d-none');
+        statusTitle.textContent = title;
+        statusText.textContent = text;
+    }
+
+    function setLoadingState(isLoading) {
+        generateBtn.disabled = isLoading;
+        countInput.disabled = isLoading;
+        generateBtn.textContent = isLoading ? 'Генерация...' : 'Сгенерировать';
+    }
+
+    form.addEventListener('submit', async function (e) {
         e.preventDefault();
 
-        const formData = new FormData(this);
+        resultBox.classList.add('d-none');
+        setLoadingState(true);
 
-        fetchWithAuth('/todo/generate/', {
-            method: 'POST',
-            body: formData
-        })
-                .then(res => res.json())
-                .then(data => {
-                    console.log('Успешно:', data);
-                    window.location.href = '/todo/home/';
-                })
-                .catch(error => console.error('Ошибка:', error));
+        const requestedCount = Number(countInput.value);
+        setStatus(
+            'warning',
+            'Генерация запущена',
+            `Отправили запрос на создание ${requestedCount} тудушек. Обычно это занимает несколько секунд.`
+        );
 
-        this.reset();
+        const formData = new URLSearchParams();
+        formData.set('count', countInput.value);
+
+        try {
+            const response = await fetchWithAuth('/todo/generate/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                },
+                body: formData
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Не удалось выполнить генерацию');
+            }
+
+            setStatus(
+                'success',
+                'Генерация завершена',
+                `Успешно сгенерировано ${requestedCount} тудушек.`
+            );
+            resultText.textContent = data.details || `Создано ${requestedCount} задач.`;
+            resultBox.classList.remove('d-none');
+        } catch (error) {
+            setStatus(
+                'danger',
+                'Ошибка генерации',
+                error.message || 'Во время генерации произошла ошибка.'
+            );
+        } finally {
+            setLoadingState(false);
+        }
+    });
+
+    repeatBtn.addEventListener('click', function () {
+        resultBox.classList.add('d-none');
+        countInput.focus();
+        setStatus(
+            'secondary',
+            'Готово к новой генерации',
+            'Можно изменить количество задач и запустить генерацию ещё раз.'
+        );
     });
 </script>
 {% endblock content %}

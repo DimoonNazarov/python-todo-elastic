@@ -393,12 +393,14 @@ async def delete_todo(
 ) -> dict[str, Any]:
     """Удаление задачи только ее владельцем"""
 
-    await todo_service.delete(
+    todo = await todo_service.delete(
         uow_session=uow_session, todo_id=todo_id, current_user=current_user
     )
     return {
         "status": "success",
         "details": "Todo deleted",
+        "deleted_todo_title": todo.title,
+        "deleted_for_user_email": current_user.email,
         "limit": limit,
         "skip": skip,
     }
@@ -425,6 +427,8 @@ async def delete_todos(
         "status": "success",
         "deleted_count": deleted_count,
         "details": f"Successfully deleted {deleted_count} todos",
+        "deleted_for_user_id": current_user.id,
+        "deleted_for_user_email": current_user.email,
     }
 
 

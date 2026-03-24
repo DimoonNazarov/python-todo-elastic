@@ -1,13 +1,20 @@
 const modal = document.querySelector("#exampleModal");
+const modalTitle = modal.querySelector("#exampleModalTitle");
+const defaultModalTitle = "Вы уверены?";
 
-const closeShowModal = (action) => {
+const closeShowModal = (action, titleText = defaultModalTitle) => {
     if (modal.classList.contains("show")) {
         modal.classList.remove('show')
         setTimeout(() => {
             modal.style = "display: none;";
-            modal.querySelector("button.btn.btn-success").remove()
+            modalTitle.textContent = defaultModalTitle;
+            const confirmButton = modal.querySelector("button.btn.btn-success");
+            if (confirmButton) {
+                confirmButton.remove();
+            }
         }, 0)
     } else {
+        modalTitle.textContent = titleText;
         addActionButton(action);
         modal.style = "display: block; background-color: rgba(0,0,0,0.5)";
         setTimeout(() => {
