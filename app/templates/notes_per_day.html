@@ -41,7 +41,7 @@
                             <div class="col-md-4">
                                 <div class="card bg-light">
                                     <div class="card-body text-center">
-                                        <h3 class="h5 text-muted">Дней с данными</h3>
+                                        <h3 class="h5 text-muted">Дней в периоде</h3>
                                         <p class="h2 mb-0 text-success">{{ dates|length }}</p>
                                     </div>
                                 </div>
@@ -49,13 +49,9 @@
                             <div class="col-md-4">
                                 <div class="card bg-light">
                                     <div class="card-body text-center">
-                                        <h3 class="h5 text-muted">В среднем в день</h3>
+                                        <h3 class="h5 text-muted">Активных пользователей</h3>
                                         <p class="h2 mb-0 text-info">
-                                            {% if counts %}
-                                                {{ (total / days)|round(1) }}
-                                            {% else %}
-                                                0
-                                            {% endif %}
+                                            {{ users_count }}
                                         </p>
                                     </div>
                                 </div>
@@ -79,7 +75,18 @@
     {% if not error %}
     // Данные из шаблона
     const dates = {{ dates|tojson }};
-    const counts = {{ counts|tojson }};
+    const series = {{ series|tojson }};
+
+    const palette = [
+        'rgb(75, 192, 192)',
+        'rgb(54, 162, 235)',
+        'rgb(255, 99, 132)',
+        'rgb(255, 159, 64)',
+        'rgb(153, 102, 255)',
+        'rgb(255, 205, 86)',
+        'rgb(46, 204, 113)',
+        'rgb(231, 76, 60)',
+    ];
     
     // Создание графика при загрузке страницы
     document.addEventListener('DOMContentLoaded', function() {
@@ -88,14 +95,17 @@
             type: 'line',
             data: {
                 labels: dates,
-                datasets: [{
-                    label: 'Количество заметок',
-                    data: counts,
-                    borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                    tension: 0.1,
-                    fill: true
-                }]
+                datasets: series.map((item, index) => {
+                    const color = palette[index % palette.length];
+                    return {
+                        label: item.label,
+                        data: item.data,
+                        borderColor: color,
+                        backgroundColor: color.replace('rgb', 'rgba').replace(')', ', 0.16)'),
+                        tension: 0.2,
+                        fill: false
+                    };
+                })
             },
             options: {
                 responsive: true,
@@ -107,7 +117,7 @@
                     },
                     title: {
                         display: true,
-                        text: 'Динамика создания заметок'
+                        text: 'Число заметок в день от пользователя'
                     }
                 },
                 scales: {

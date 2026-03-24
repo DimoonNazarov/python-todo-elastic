@@ -54,6 +54,15 @@ class AuthRepository:
         filter_dict = {"is_active": True}
         return await self.find_all(filter_dict=filter_dict)
 
+    async def get_users_by_ids(self, user_ids: list[int]) -> Sequence[User]:
+        """Получить пользователей по списку ID."""
+        if not user_ids:
+            return []
+
+        stmt = select(User).where(User.id.in_(user_ids))
+        result = await self._session.execute(stmt)
+        return result.scalars().all()
+
     async def update(self, filter_dict: dict, update_dict: dict) -> int:
         """
         Обновить пользователей по фильтрам

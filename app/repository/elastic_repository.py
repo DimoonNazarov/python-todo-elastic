@@ -506,3 +506,68 @@ class ElasticRepository:
         except Exception as e:
             logger.error("Failed to get notes per day: %s", e)
             return []
+
+    async def get_notes_per_day_by_user(
+        self,
+        days: int = 30,
+        author_id: int | None = None,
+    ) -> list[dict]:
+        """
+        Возвращает количество заметок по дням в разрезе пользователей.
+        """
+        try:
+            from datetime import datetime, timedelta
+
+            date_from = (datetime.now() - timedelta(days=days)).date().isoformat()
+
+            query_filters = [{"range": {"created_at": {"gte": date_from}}}]
+            if author_id is not None:
+                query_filters.append({"term": {"author_id": author_id}})
+
+            response = await self._client.search(
+                index=INDEX_NAME,
+                body={
+                    "size": 0,
+                    "query": {"bool": {"filter": query_filters}},
+                    "aggs": {
+                        "notes_per_day": {
+                            "date_histogram": {
+                                "field": "created_at",
+                                "calendar_interval": "day",
+                                "format": "yyyy-MM-dd",
+                                "min_doc_count": 0,
+                            },
+                            "aggs": {
+                                "by_author": {
+                                    "terms": {
+                                        "field": "author_id",
+                                        "size": 100,
+                                    }
+                                }
+                            },
+                        }
+                    },
+                },
+            )
+
+            result = []
+            if "aggregations" in response:
+                for bucket in response["aggregations"]["notes_per_day"]["buckets"]:
+                    result.append(
+                        {
+                            "date": bucket["key_as_string"],
+                            "total": bucket["doc_count"],
+                            "users": [
+                                {
+                                    "author_id": author_bucket["key"],
+                                    "count": author_bucket["doc_count"],
+                                }
+                                for author_bucket in bucket["by_author"]["buckets"]
+                            ],
+                        }
+                    )
+
+            return result
+        except Exception as e:
+            logger.error("Failed to get notes per day by user: %s", e)
+            return []

@@ -1,12 +1,7 @@
-import base64
 import logging
-import io
 import os
 from typing import Any
-import squarify
 import shutil
-import matplotlib.pyplot as plt
-import seaborn as sb
 from datetime import datetime
 from fastapi import (
     APIRouter,
@@ -177,18 +172,45 @@ async def notes_per_day_chart(
     """Страница с графиком активности пользователей"""
     try:
         author_id = current_user.id if current_user.role == UserRole.VIEWER else None
-        data = await uow_session.elastic.get_notes_per_day(days, author_id=author_id)
+        data = await uow_session.elastic.get_notes_per_day_by_user(
+            days,
+            author_id=author_id,
+        )
         dates = [item["date"] for item in data]
-        counts = [item["count"] for item in data]
+
+        user_ids = sorted(
+            {
+                user_bucket["author_id"]
+                for item in data
+                for user_bucket in item["users"]
+            }
+        )
+
+        async with uow_session.start():
+            users = await uow_session.auth.get_users_by_ids(user_ids)
+
+        users_by_id = {user.id: user for user in users}
+        series = []
+        for user_id in user_ids:
+            user = users_by_id.get(user_id)
+            label = user.email if user else f"Пользователь #{user_id}"
+            counts = []
+            for item in data:
+                users_count_map = {
+                    bucket["author_id"]: bucket["count"] for bucket in item["users"]
+                }
+                counts.append(users_count_map.get(user_id, 0))
+            series.append({"label": label, "data": counts})
 
         return templates.TemplateResponse(
             "notes_per_day.html",
             {
                 "request": request,
                 "dates": dates,
-                "counts": counts,
+                "series": series,
                 "days": days,
-                "total": sum(counts),
+                "total": sum(item["total"] for item in data),
+                "users_count": len(series),
             },
         )
     except Exception as e:
@@ -198,9 +220,10 @@ async def notes_per_day_chart(
             {
                 "request": request,
                 "dates": [],
-                "counts": [],
+                "series": [],
                 "days": days,
                 "total": 0,
+                "users_count": 0,
                 "error": str(e),
             },
         )
@@ -215,9 +238,12 @@ async def notes_per_day_api(
     """API endpoint для получения данных графика в JSON."""
     try:
         author_id = current_user.id if current_user.role == UserRole.VIEWER else None
-        data = await uow_session.elastic.get_notes_per_day(days, author_id=author_id)
+        data = await uow_session.elastic.get_notes_per_day_by_user(
+            days,
+            author_id=author_id,
+        )
         return JSONResponse(
-            {"data": data, "total": sum(item["count"] for item in data), "days": days}
+            {"data": data, "total": sum(item["total"] for item in data), "days": days}
         )
     except Exception as e:
         logger.error("Notes per day API error: %s", e)
@@ -375,43 +401,12 @@ async def delete_todos(
 
 @todo_router.get("/visualize/", status_code=status.HTTP_200_OK)
 async def visualize_todos(
-    request: Request,
-    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
-    current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
+    days: int = 30,
 ):
-    """Visualize todos as a treemap by tags"""
-    author_id = current_user.id if current_user.role == UserRole.VIEWER else None
-    todos = await uow_session.todo.get_many(limit=1000, skip=0, author_id=author_id)
-
-    tag_counts = {tag.value: 0 for tag in Tags}
-    for todo in todos:
-        tag_counts[todo.tag] += 1
-
-    tag_counts = {tag: count for tag, count in tag_counts.items() if count > 0}
-
-    if not tag_counts:
-        fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, "No todos available", ha="center", va="center", fontsize=18)
-        plt.axis("off")
-    else:
-        fig, ax = plt.subplots()
-        squarify.plot(
-            sizes=list(tag_counts.values()),
-            label=list(tag_counts.keys()),
-            pad=0.2,
-            text_kwargs={"fontsize": 10, "color": "white"},
-            color=sb.color_palette("rocket", len(tag_counts)),
-        )
-        plt.axis("off")
-
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png")
-    buf.seek(0)
-    plt.close(fig)
-
-    image_url = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
-    return templates.TemplateResponse(
-        "visualization.html", {"request": request, "image_url": image_url}
+    """Публичная точка входа в визуализацию активности пользователей."""
+    return RedirectResponse(
+        url=f"/todo/notes-per-day/?days={days}",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 
