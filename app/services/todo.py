@@ -1,5 +1,6 @@
 import logging
 import math
+import random
 from datetime import datetime, UTC
 from typing import Optional
 from collections.abc import Sequence
@@ -26,8 +27,64 @@ from app.utils import (
 
 logger = logging.getLogger(__name__)
 
+GENERATED_TITLES = [
+    "Купить продукты",
+    "Сделать домашнее задание",
+    "Позвонить маме",
+    "Почитать книгу",
+    "Сходить в спортзал",
+    "Приготовить ужин",
+    "Написать отчёт",
+    "Изучить Python",
+    "Посмотреть лекцию",
+    "Починить велосипед",
+    "Убраться в комнате",
+    "Оплатить счета",
+    "Записаться к врачу",
+    "Составить план на неделю",
+    "Полить цветы",
+    "Обновить резюме",
+    "Ответить на письма",
+    "Настроить Docker",
+    "Сделать бэкап данных",
+    "Пройти онлайн-курс",
+    "Написать тесты",
+    "Отрефакторить код",
+    "Прочитать документацию",
+    "Сходить на прогулку",
+    "Проверить почту",
+    "Сделать презентацию",
+    "Изучить Elasticsearch",
+    "Запустить миграции",
+    "Обновить зависимости",
+    "Написать README",
+]
+
+GENERATED_DETAILS = [
+    "Не забыть сделать это сегодня",
+    "Важная задача, требует внимания",
+    "Запланировано на эту неделю",
+    "Низкий приоритет, но нужно сделать",
+    "Срочно, дедлайн скоро",
+    "Обсудить с командой перед выполнением",
+    "Требует дополнительных ресурсов",
+    "Можно делегировать при необходимости",
+    "",
+    "",
+]
+
 
 class TodoService:
+    @staticmethod
+    def _build_random_todo_payload() -> tuple[str, str, Tags]:
+        title = random.choice(GENERATED_TITLES)
+        suffix = random.randint(1, 9999)
+        return (
+            f"{title} #{suffix}",
+            random.choice(GENERATED_DETAILS),
+            random.choice(list(Tags)),
+        )
+
     @staticmethod
     async def _sync_todo_to_search_index(
         uow_session: UnitOfWork,
@@ -275,6 +332,24 @@ class TodoService:
                 await uow_session.elastic.delete_todo(todo_id)
             except Exception as e:
                 logger.error("Elastic delete failed: %s", e)
+
+    async def generate_random_todos(
+        self,
+        uow_session: UnitOfWork,
+        count: int,
+        author_id: int,
+    ) -> None:
+        for _ in range(count):
+            title, details, tag = self._build_random_todo_payload()
+            await self.create(
+                uow_session=uow_session,
+                title=title,
+                details=details,
+                tag=tag,
+                source=TodoSource.generated,
+                image=None,
+                author_id=author_id,
+            )
 
     async def delete_multiple(
         self, uow_session: UnitOfWork, todo_ids: list[int], current_user: SUserInfo
