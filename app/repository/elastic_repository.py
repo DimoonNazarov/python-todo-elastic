@@ -1,5 +1,4 @@
 from elasticsearch import AsyncElasticsearch, NotFoundError
-from typing import List, Optional
 import logging
 from app.services.search_index import ALL_STOPWORDS
 from app.services.search_index import CLASSIFICATION_REPLACEMENTS
@@ -174,11 +173,11 @@ class ElasticRepository:
     async def search_todos(
         self,
         query_text: str,
-        tag: Optional[str] = None,
+        tag: str | None = None,
         limit: int = 50,
         skip: int = 0,
-        author_id: Optional[int] = None,
-    ) -> List[dict]:
+        author_id: int | None = None,
+    ) -> list[dict]:
 
         """
         Полнотекстовый поиск по title и details с нестрогим соответствием.
@@ -351,8 +350,8 @@ class ElasticRepository:
     async def search_by_date(
         self,
         date_from: str,
-        author_id: Optional[int] = None,
-    ) -> List[dict]:
+        author_id: int| None= None,
+    ) -> list[dict]:
         """Возвращает все тудушки, созданные после указанной даты"""
         try:
             must_filters = [{"range": {"created_at": {"gte": date_from}}}]
@@ -374,8 +373,8 @@ class ElasticRepository:
     async def search_by_tag(
         self,
         tag: str,
-        author_id: Optional[int] = None,
-    ) -> List[dict]:
+        author_id: int | None = None,
+    ) -> list[dict]:
         """Возвращает все тудушки с заданным тегом"""
         try:
             filters = [{"term": {"tag": tag}}]
@@ -398,7 +397,7 @@ class ElasticRepository:
         self,
         limit: int = 50,
         skip: int = 0,
-        author_id: Optional[int] = None,
+        author_id: int | None = None,
     ):
         """Возвращает все тудушки из индекса"""
         try:
@@ -416,7 +415,7 @@ class ElasticRepository:
         except Exception as e:
             logger.error("Failed to get all todos: %s", e)
 
-    async def get_top_words(self, limit: int = 10, author_id: Optional[int] = None):
+    async def get_top_words(self, limit: int = 10, author_id: int | None = None):
         try:
             query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
             response = await self._client.search(
@@ -460,8 +459,8 @@ class ElasticRepository:
     async def get_notes_per_day(
         self,
         days: int = 30,
-        author_id: Optional[int] = None,
-    ) -> List[dict]:
+        author_id: int | None = None,
+    ) -> list[dict]:
         """
         Возвращает количество заметок по дням
         :param days: количество дней для анализа

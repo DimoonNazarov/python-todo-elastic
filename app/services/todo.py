@@ -419,6 +419,24 @@ class TodoService:
 
         return todo
 
+    async def get_todo_for_edit(
+        self,
+        uow_session: UnitOfWork,
+        todo_id: int,
+        user: SUserInfo,
+    ) -> tuple[TodoORM, list]:
+        async with uow_session.start():
+            todo = await uow_session.todo.get_todo_by_id(todo_id)
+            if not todo:
+                raise NotFoundException(f"Not found todo by this id: {todo_id}")
+
+            images = await uow_session.todo.get_all_image_paths()
+
+            if todo.author_id != user.id:
+                raise ForbiddenException("Вы можете редактировать только свои задачи")
+
+        return todo, images
+
     async def delete(
         self, uow_session: UnitOfWork, todo_id: int, current_user: SUserInfo
     ) -> TodoORM:

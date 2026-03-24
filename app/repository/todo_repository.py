@@ -3,10 +3,8 @@ from collections.abc import Sequence
 from sqlalchemy import select, delete, update, func, desc, distinct, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy.util import deprecated
 
 from app.models import Todo
-from app.models import User
 from app.schemas import Tags
 
 
@@ -37,9 +35,7 @@ class TodoRepository:
 
     async def get_todo_by_id(self, todo_id: int) -> Todo | None:
         result = await self._session.execute(
-            select(Todo)
-            .options(selectinload(Todo.author))
-            .where(Todo.id == todo_id)
+            select(Todo).options(selectinload(Todo.author)).where(Todo.id == todo_id)
         )
         return result.scalar_one_or_none()
 
@@ -75,9 +71,7 @@ class TodoRepository:
 
     async def get_todos_by_ids(self, todo_ids: list[int]) -> Sequence[Todo]:
         result = await self._session.execute(
-            select(Todo)
-            .options(selectinload(Todo.author))
-            .where(Todo.id.in_(todo_ids))
+            select(Todo).options(selectinload(Todo.author)).where(Todo.id.in_(todo_ids))
         )
         return result.scalars().all()
 
@@ -109,20 +103,6 @@ class TodoRepository:
 
     async def delete_all(self) -> None:
         await self._session.execute(delete(Todo))
-
-    @deprecated
-    async def delete_todos(self, skip: int, limit: int, start: int, end: int):
-        if not start and not end:
-            await self._session.execute(delete(Todo))
-        else:
-            subquery = (
-                select(Todo.id)
-                .order_by(desc(Todo.id))
-                .offset(skip * limit + (start - 1))
-                .limit(end - start + 1)
-            )
-
-            await self._session.execute(delete(Todo).where(Todo.id.in_(subquery)))
 
     async def get_all_image_paths(self):
         find_images = await self._session.execute(
