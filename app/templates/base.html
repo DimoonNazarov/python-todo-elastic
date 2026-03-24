@@ -112,6 +112,13 @@
             display: block;
         }
 
+        #exampleModalTitle {
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            max-width: 100%;
+        }
+
         .user-action-message {
             display: none;
             margin: 0;
@@ -199,7 +206,7 @@
 
         .user-switch-item {
             display: flex;
-            align-items: stretch;
+            flex-direction: column;
             gap: 8px;
         }
 
@@ -239,13 +246,15 @@
         }
 
         .user-switch-side {
-            display: inline-flex;
-            align-items: center;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
             gap: 8px;
-            flex-shrink: 0;
+            width: 100%;
         }
 
         .user-delete-button {
+            width: 100%;
             border: 1px solid #f2c4c4;
             background: #fff5f5;
             color: #c53030;
@@ -258,9 +267,36 @@
             transition: background 0.2s ease, border-color 0.2s ease;
         }
 
+        .user-delete-button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
         .user-delete-button:hover {
             background: #ffe8e8;
             border-color: #e8a7a7;
+        }
+
+        .user-role-select {
+            width: 100%;
+            border: 1px solid #d7deea;
+            border-radius: 10px;
+            background: #ffffff;
+            color: #1f2937;
+            font-size: 12px;
+            padding: 6px 8px;
+        }
+
+        .user-role-select.is-pending {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .user-switch-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
         }
 
         .user-menu-empty {
@@ -353,7 +389,7 @@
                     <div class="user-menu-section-title">Действия</div>
                     <div class="user-menu-actions">
                         <a class="user-menu-link" href="/auth/login" role="menuitem">Войти под другим пользователем</a>
-                        <a class="user-menu-link" href="/auth/register" role="menuitem">Создать пользователя</a>
+                        <a class="user-menu-link" id="createUserLink" href="/auth/register" role="menuitem" style="display: none;">Создать пользователя</a>
                         <a class="user-menu-link" href="/auth/logout" role="menuitem">Выйти из текущей сессии</a>
                     </div>
                 </div>
@@ -440,12 +476,16 @@
         if (role === 'editor') {
             return 'Редактор';
         }
+        if (role === 'viewer') {
+            return 'Пользователь';
+        }
         return 'Роль не указана';
     }
 
     function fillUserWidget(user) {
         const displayName = `${user.first_name} ${user.last_name}`.trim();
         const initials = getUserInitials(user);
+        const createUserLink = document.getElementById('createUserLink');
 
         document.getElementById('userMenuAvatar').textContent = initials;
         document.getElementById('userMenuPanelAvatar').textContent = initials;
@@ -454,9 +494,16 @@
         document.getElementById('userMenuEmail').textContent = user.email;
         document.getElementById('userMenuPanelEmail').textContent = user.email;
         document.getElementById('userMenuPanelRole').textContent = formatRoleLabel(user.role);
+
+        if (user.role === 'admin') {
+            createUserLink.style.display = '';
+        } else {
+            createUserLink.style.display = 'none';
+        }
     }
 
     let userActionMessageTimer = null;
+    let currentUserState = null;
 
     function showUserActionMessage(message, level = 'info') {
         const messageElement = document.getElementById('userActionMessage');
@@ -481,6 +528,8 @@
             return;
         }
 
+        const canManageRoles = currentUser && currentUser.role === 'admin';
+
         list.innerHTML = users.map((user) => {
             const displayName = escapeHtml(`${user.first_name} ${user.last_name}`.trim());
             const email = escapeHtml(user.email);
@@ -494,24 +543,66 @@
                     <a class="user-switch-link ${isCurrent ? 'is-current' : ''}" href="${href}" ${isCurrent ? 'aria-current="true"' : ''}>
                         <span class="user-switch-main">
                             <span class="user-switch-name">${displayName}</span>
-                            <span class="user-switch-email">${email}</span>
+                            <span class="user-switch-email">${email} · ${formatRoleLabel(user.role)}</span>
                         </span>
                         <span class="user-switch-badge">${isCurrent ? 'Текущий' : 'Выбрать'}</span>
                     </a>
-                    <span class="user-switch-side">
-                        <button
-                            type="button"
-                            class="user-delete-button"
-                            data-user-id="${user.id}"
-                            data-user-name="${displayName}"
-                            data-user-email="${email}"
-                        >
-                            Удалить
-                        </button>
-                    </span>
+                    <div class="user-switch-controls">
+                        ${(canManageRoles || isCurrent) ? `
+                        <span class="user-switch-side">
+                            <button
+                                type="button"
+                                class="user-delete-button"
+                                data-user-id="${user.id}"
+                                data-user-name="${displayName}"
+                                data-user-email="${email}"
+                            >
+                                Удалить
+                            </button>
+                        </span>
+                        ` : ''}
+                        ${canManageRoles ? `
+                        <span class="user-switch-side">
+                            <select class="user-role-select" data-user-id="${user.id}">
+                                <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Администратор</option>
+                                <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>Редактор</option>
+                                <option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>Пользователь</option>
+                            </select>
+                        </span>
+                        ` : ''}
+                    </div>
                 </div>
             `;
         }).join('');
+    }
+
+    async function handleUpdateUserRole(userId, role, userName) {
+        const response = await fetchWithAuth(`/auth/users/${userId}/role`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ role }),
+        });
+
+        let payload = {};
+        try {
+            payload = await response.json();
+        } catch (error) {
+            payload = {};
+        }
+
+        if (!response.ok) {
+            showUserActionMessage(payload.detail || 'Не удалось обновить роль пользователя.', 'danger');
+            await loadUserMenu();
+            return;
+        }
+
+        showUserActionMessage(
+            `Роль пользователя ${payload.updated_user_name || userName} изменена на "${formatRoleLabel(payload.role)}".`,
+            'success'
+        );
+        await loadUserMenu();
     }
 
     async function handleDeleteUser(userId, userName, userEmail) {
@@ -577,6 +668,7 @@
             }
 
             const currentUser = await currentUserResponse.json();
+            currentUserState = currentUser;
             fillUserWidget(currentUser);
 
             if (activeUsersResponse.ok) {
@@ -628,14 +720,41 @@
         event.preventDefault();
         event.stopPropagation();
 
-        const userId = deleteButton.dataset.userId;
+        const userId = Number(deleteButton.dataset.userId);
         const userName = deleteButton.dataset.userName;
         const userEmail = deleteButton.dataset.userEmail;
+
+        if (currentUserState && currentUserState.role !== 'admin' && currentUserState.id !== userId) {
+            showUserActionMessage('Удалять других пользователей может только администратор.', 'warning');
+            return;
+        }
 
         closeShowModal(
             () => handleDeleteUser(userId, userName, userEmail),
             `Вы уверены, что хотите удалить пользователя "${userName}"?`
         );
+    });
+
+    document.addEventListener('change', (event) => {
+        const roleSelect = event.target.closest('.user-role-select');
+        if (!roleSelect) {
+            return;
+        }
+
+        if (!currentUserState || currentUserState.role !== 'admin') {
+            showUserActionMessage('Назначать роли может только администратор.', 'warning');
+            return;
+        }
+
+        const userId = roleSelect.dataset.userId;
+        const userItem = roleSelect.closest('.user-switch-item');
+        const userName = userItem?.querySelector('.user-switch-name')?.textContent?.trim() || 'пользователя';
+
+        roleSelect.classList.add('is-pending');
+        handleUpdateUserRole(userId, roleSelect.value, userName)
+            .finally(() => {
+                roleSelect.classList.remove('is-pending');
+            });
     });
 
     loadUserMenu();

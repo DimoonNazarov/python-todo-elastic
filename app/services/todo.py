@@ -9,7 +9,6 @@ from fastapi import UploadFile
 from app.exceptions import (
     InvalidPageException,
     NotFoundException,
-    OperationNotPermittedException,
     ForbiddenException,
 )
 
@@ -75,6 +74,14 @@ GENERATED_DETAILS = [
 
 
 class TodoService:
+    @staticmethod
+    def _can_view_only_own_todos(user: SUserInfo) -> bool:
+        return user.role == UserRole.VIEWER
+
+    @staticmethod
+    def _can_delete_any_todo(user: SUserInfo) -> bool:
+        return user.role == UserRole.ADMIN
+
     @staticmethod
     def _build_random_todo_payload() -> tuple[str, str, Tags]:
         title = random.choice(GENERATED_TITLES)
@@ -158,6 +165,7 @@ class TodoService:
     async def get_todos(
         self,
         uow_session: UnitOfWork,
+        current_user: SUserInfo,
         limit: int,
         skip: int,
         created_from: str | None,
@@ -166,11 +174,15 @@ class TodoService:
     ) -> tuple[Sequence[TodoORM], int, int]:
         created_from = self._parse_data(created_from)
         created_to = self._parse_data(created_to)
+        author_id = current_user.id if self._can_view_only_own_todos(current_user) else None
 
         async with uow_session.start():
 
             count = await uow_session.todo.get_count_todos(
-                created_from=created_from, created_to=created_to, tag=tag
+                created_from=created_from,
+                created_to=created_to,
+                tag=tag,
+                author_id=author_id,
             )
             pages = math.ceil(count / limit) if count else 1
 
@@ -185,6 +197,7 @@ class TodoService:
                 created_from=created_from,
                 created_to=created_to,
                 tag=tag,
+                author_id=author_id,
             )
 
         return enrich_todo_display_list(todos), skip, pages
@@ -209,8 +222,8 @@ class TodoService:
             if not todo:
                 raise NotFoundException(f"Todo with id {todo_id} not found")
 
-            if todo.author_id != user.id and user.role != UserRole.ADMIN:
-                raise OperationNotPermittedException("Operation not permitted")
+            if todo.author_id != user.id:
+                raise ForbiddenException("Вы можете редактировать только свои задачи")
 
             if image and image.filename:
                 random_filename = (
@@ -315,8 +328,8 @@ class TodoService:
             todo = await uow_session.todo.get_todo_by_id(todo_id=todo_id)
             if not todo:
                 raise NotFoundException(f"Todo with id {todo_id} not found")
-            if todo.author_id != current_user.id and current_user.role != UserRole.ADMIN:
-                raise ForbiddenException("You can only delete your own todos")
+            if todo.author_id != current_user.id and not self._can_delete_any_todo(current_user):
+                raise ForbiddenException("Вы можете удалять только свои задачи")
 
             logger.info("Deleting todo: %s", todo)
             if (
@@ -362,12 +375,12 @@ class TodoService:
                 raise NotFoundException(f"Todos with id {todo_ids} not found")
 
             # Проверка прав: только владелец или админ может удалять
-            if current_user.role != UserRole.ADMIN:
+            if not self._can_delete_any_todo(current_user):
                 not_owned_ids = [
                     todo.id for todo in todos if todo.author_id != current_user.id
                 ]
                 if not_owned_ids:
-                    raise ForbiddenException("You can only delete your own todos")
+                    raise ForbiddenException("Вы можете удалять только свои задачи")
 
             image_paths_to_delete = []
             for todo in todos:
@@ -399,9 +412,12 @@ class TodoService:
         Returns: количество удаленных записей
         """
         async with uow_session.start():
-            user_todos = await uow_session.todo.get_todos_by_author_id(
-                author_id=current_user.id,
-            )
+            if self._can_delete_any_todo(current_user):
+                user_todos = await uow_session.todo.get_all()
+            else:
+                user_todos = await uow_session.todo.get_todos_by_author_id(
+                    author_id=current_user.id,
+                )
             if not user_todos:
                 logger.info("No user todos found")
                 return 0
@@ -434,7 +450,10 @@ class TodoService:
                 except Exception as e:
                     logger.error(f"Failed to delete image {image_path}: {e}")
 
-            await uow_session.todo.delete_by_author_id(current_user.id)
+            if self._can_delete_any_todo(current_user):
+                await uow_session.todo.delete_all()
+            else:
+                await uow_session.todo.delete_by_author_id(current_user.id)
             for todo_id in todo_ids:
                 try:
                     await uow_session.elastic.delete_todo(todo_id=todo_id)

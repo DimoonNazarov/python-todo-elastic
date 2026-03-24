@@ -11,6 +11,7 @@ from app.exceptions import (
     InactiveUserException,
     UserAlreadyExists,
 )
+from app.schemas import UserRole
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -33,7 +34,18 @@ async def user_already_exists_handler(request: Request, exc: Exception) -> HTMLR
     assert isinstance(exc, UserAlreadyExists)
     return templates.TemplateResponse(
         "register.html",
-        {"request": request, "error": "Username already registered"},
+        {
+            "request": request,
+            "error": "Username already registered",
+            "can_choose_role": False,
+            "default_role": UserRole.EDITOR.value,
+            "first_user": False,
+            "role_options": [
+                {"value": UserRole.ADMIN.value, "label": "Администратор"},
+                {"value": UserRole.EDITOR.value, "label": "Редактор"},
+                {"value": UserRole.VIEWER.value, "label": "Пользователь"},
+            ],
+        },
         status_code=400,
     )
 

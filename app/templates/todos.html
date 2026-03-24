@@ -6,6 +6,14 @@
 
 <div id="todoActionMessage" class="alert alert-success d-none mt-2" role="alert"></div>
 
+<style>
+    #todoActionMessage {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+</style>
+
 <div class="card mt-3 mb-3">
     <div class="card-header">
         <h3 class="h5 mb-0">Поиск и аналитика</h3>
@@ -191,36 +199,56 @@
 
 <ul class="list-group">
     {% for todo in todos %}
-    <li class="list-group-item d-flex align-items-center gap-3 flex-wrap">
+    <li class="list-group-item">
+        <div class="d-flex align-items-start gap-3 flex-wrap flex-lg-nowrap">
         {% if todo.image_path %}
             <img src="{{ url_for('images', path=todo.image_path) }}" alt="todo" style="width: 50px; height: 50px;">
         {% endif %}
 
-        {% if todo.completed %}
-        <strike>{{ todo.display_title or todo.title }}</strike>
-        {% else %}
-        <span>{{ todo.display_title or todo.title }}</span>
-        {% endif %}
+        <div class="d-flex flex-column gap-2 flex-grow-1" style="min-width: 0;">
+            <div class="d-flex align-items-start gap-3">
+                <div class="flex-grow-1" style="min-width: 0;">
+            {% if todo.completed %}
+                    <strike class="mb-0 d-block" style="white-space: normal; overflow-wrap: anywhere; word-break: break-word;">{{ todo.display_title or todo.title }}</strike>
+            {% else %}
+                    <span class="mb-0 d-block" style="white-space: normal; overflow-wrap: anywhere; word-break: break-word;">{{ todo.display_title or todo.title }}</span>
+            {% endif %}
+                </div>
 
-        <div style="color: dodgerblue">
-            {{ todo.source }}
+                <span class="text-muted small text-nowrap ms-auto flex-shrink-0">
+                {{ todo.author_email or 'Автор неизвестен' }}
+            </span>
+            </div>
+
+            <div style="color: dodgerblue" class="small flex-shrink-0">
+                {{ todo.source }}
+            </div>
         </div>
 
-        <div class="form-check form-switch ms-auto">
+        <div class="d-flex align-items-center gap-3 ms-lg-auto flex-shrink-0">
+        <div class="form-check form-switch mb-0">
             <label class="form-check-label" for="flexSwitchCheckChecked">Выполнено</label>
             <input class="form-check-input completedTask" type="checkbox" id="flexSwitchCheckChecked"
                    data-todo-id="{{ todo.id }}" data-todo-title="{{ todo.title }}"
                    data-todo-details="{{ todo.details }}" data-todo-tag="{{ todo.tag }}" data-todo-date="{{ todo.created_at }}"
-                   data-todo-image="{{ todo.image_path }}" {% if todo.completed
+                   data-todo-image="{{ todo.image_path }}"
+                   data-can-edit="{% if todo.author_id == current_user_id %}true{% else %}false{% endif %}"
+                   {% if todo.completed
                    %}checked{% endif %}>
         </div>
 
-        <div class="btn-group">
+        <div class="btn-group flex-shrink-0">
             <a class="btn btn-success"
-               href="/todo/edit/{{ todo.id }}/?limit={{ limit }}&skip={{ page }}">Редактировать</a>
+               href="/todo/edit/{{ todo.id }}/?limit={{ limit }}&skip={{ page }}"
+               data-todo-id="{{ todo.id }}"
+               data-todo-title="{{ todo.title }}"
+               data-can-edit="{% if todo.author_id == current_user_id %}true{% else %}false{% endif %}">Редактировать</a>
             <button class="btn btn-danger deleteButton" href="#"
                     data-todo-id="{{ todo.id }}"
-                    data-todo-title="{{ todo.title }}">Удалить</button>
+                    data-todo-title="{{ todo.title }}"
+                    data-can-delete="{% if current_user_role == 'admin' or todo.author_id == current_user_id %}true{% else %}false{% endif %}">Удалить</button>
+        </div>
+        </div>
         </div>
     </li>
     {% endfor %}
@@ -372,26 +400,56 @@
         button.addEventListener('click', function (e) {
             const todoId = this.dataset.todoId;
             const todoTitle = this.dataset.todoTitle;
+            const canDelete = this.dataset.canDelete === 'true';
+
+            if (!canDelete) {
+                e.preventDefault();
+                showTodoActionMessage('Вы не можете удалить чужую задачу.', 'warning');
+                return;
+            }
 
             const action = () => {
                 fetchWithAuth(`/todo/delete/${todoId}/`, {
                     method: 'DELETE'
                 })
-                    .then(res => res.json())
+                    .then(async (res) => {
+                        const data = await res.json();
+                        if (!res.ok) {
+                            throw new Error(data.detail || 'Не удалось удалить задачу.');
+                        }
+                        return data;
+                    })
                     .then(data => {
                         persistTodoActionMessage(
                             `Тудушка "${data.deleted_todo_title}" удалена для пользователя ${data.deleted_for_user_email}.`
                         );
                         window.location.href = window.location.href.toString();
                     })
-                    .catch(error => console.error('Ошибка:', error))
+                    .catch(error => showTodoActionMessage(error.message || 'Не удалось удалить задачу.', 'danger'))
             };
             closeShowModal(action, `Вы уверены, что хотите удалить "${todoTitle}"?`)
         });
     });
 
+    document.querySelectorAll('a[data-can-edit]').forEach(link => {
+        link.addEventListener('click', function (e) {
+            if (this.dataset.canEdit === 'true') {
+                return;
+            }
+
+            e.preventDefault();
+            showTodoActionMessage('Вы можете редактировать только свои задачи.', 'warning');
+        });
+    });
+
     document.querySelectorAll('.completedTask').forEach(checkbox => {
         checkbox.addEventListener('change', function () {
+            if (this.dataset.canEdit === 'false') {
+                this.checked = !this.checked;
+                showTodoActionMessage('Вы можете редактировать только свои задачи.', 'warning');
+                return;
+            }
+
             const todoId = this.dataset.todoId;
             const todoTitle = this.dataset.todoTitle;
             const todoDetails = this.dataset.todoDetails;
@@ -411,12 +469,21 @@
                 method: 'PUT',
                 body: formData
             })
-                .then(res => res.json())
+                .then(async (res) => {
+                    const data = await res.json();
+                    if (!res.ok) {
+                        throw new Error(data.detail || 'Не удалось обновить задачу.');
+                    }
+                    return data;
+                })
                 .then(data => {
                     console.log('Успешно:', data);
                     window.location.href = window.location.href.toString();
                 })
-                .catch(error => console.error('Ошибка:', error));
+                .catch(error => {
+                    this.checked = !this.checked;
+                    showTodoActionMessage(error.message || 'Не удалось обновить задачу.', 'danger');
+                });
         });
     });
 
@@ -450,8 +517,11 @@
             })
                 .then(res => res.json())
                 .then(data => {
+                    const message = data.deleted_scope === 'all'
+                        ? `Администратор удалил ${data.deleted_count} тудушек из системы.`
+                        : `Удалено ${data.deleted_count} тудушек для пользователя ${data.deleted_for_user_email}.`;
                     persistTodoActionMessage(
-                        `Удалено ${data.deleted_count} тудушек для пользователя ${data.deleted_for_user_email}.`
+                        message
                     );
                 })
                 .catch(error => console.error('Ошибка:', error));

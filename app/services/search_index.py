@@ -242,6 +242,7 @@ def build_search_document(todo: Any) -> dict[str, Any]:
     masked = build_masked_fields(_get_value(todo, "title"), _get_value(todo, "details"))
     return {
         "todo_id": _get_value(todo, "id"),
+        "author_id": _get_value(todo, "author_id"),
         "title": _get_value(todo, "title"),
         "details": _get_value(todo, "details"),
         "tag": _get_value(todo, "tag"),
@@ -273,6 +274,11 @@ def enrich_todo_display(item: Any) -> Any:
     _set_value(item, "classification_level", classification)
     _set_value(item, "masked_title", masked_title)
     _set_value(item, "masked_details", masked_details)
+    author = _get_value(item, "author")
+    author_email = _get_value(item, "author_email")
+    if author_email is None and author is not None:
+        author_email = _get_value(author, "email")
+    _set_value(item, "author_email", author_email)
     _set_value(item, "display_title", masked_title or title)
     _set_value(item, "display_details", masked_details or details)
     return item
@@ -294,6 +300,8 @@ def merge_search_hits_with_todos(hits: Sequence[dict[str, Any]], todos: Sequence
 
         item = {
             "id": _get_value(todo, "id"),
+            "author_id": _get_value(todo, "author_id"),
+            "author_email": _get_value(_get_value(todo, "author"), "email"),
             "title": _get_value(todo, "title"),
             "details": _get_value(todo, "details"),
             "tag": _get_value(todo, "tag"),

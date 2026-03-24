@@ -154,6 +154,12 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+        }
     </style>
 </head>
 <body>
@@ -246,6 +252,32 @@
                     <div id="confirm_passwordError" class="field-error"></div>
                 </div>
 
+                <div class="form-group">
+                    <label for="role">Роль пользователя</label>
+                    <select
+                        id="role"
+                        name="role"
+                        class="input"
+                        {% if first_user %}disabled{% endif %}
+                    >
+                        {% for option in role_options %}
+                            {% if can_choose_role or option.value == default_role %}
+                            <option value="{{ option.value }}" {% if option.value == default_role %}selected{% endif %}>
+                                {{ option.label }}
+                            </option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    {% if first_user %}
+                    <div class="hint">Это первый пользователь в системе, поэтому ему будет назначена роль администратора.</div>
+                    {% elif can_choose_role %}
+                    <div class="hint">Как администратор, вы можете сразу выбрать роль новому пользователю.</div>
+                    {% else %}
+                    <div class="hint">Для новых пользователей будет назначена стандартная роль редактора.</div>
+                    {% endif %}
+                    <div id="roleError" class="field-error"></div>
+                </div>
+
                 <button type="submit" class="button" id="submitBtn">
                     Зарегистрироваться
                 </button>
@@ -266,6 +298,7 @@
         const loader = document.getElementById('loader');
         const errorContainer = document.getElementById('errorContainer');
         const successContainer = document.getElementById('successContainer');
+        const roleSelect = document.getElementById('role');
 
         // Функция для очистки предыдущих ошибок
         function clearErrors() {
@@ -324,7 +357,8 @@
                 first_name: document.getElementById('first_name').value,
                 last_name: document.getElementById('last_name').value,
                 password: password,
-                confirm_password: confirmPassword
+                confirm_password: confirmPassword,
+                role: roleSelect.value
             };
 
             try {
@@ -336,6 +370,13 @@
                     body: JSON.stringify(formData)
                 });
 
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (error) {
+                    data = {};
+                }
+
                 if (response.ok) {
                     // Успешная регистрация
                     successContainer.style.display = 'block';
@@ -343,6 +384,7 @@
 
                     // Очищаем форму
                     form.reset();
+                    roleSelect.value = '{{ default_role }}';
 
                     // Используем location из ответа сервера
                     const redirectUrl = response.headers.get('location') || '/auth/login';

@@ -7,6 +7,7 @@ import enum
 class UserRole(str, enum.Enum):
     ADMIN = "admin"
     EDITOR = "editor"
+    VIEWER = "viewer"
 
 
 # OAuth2 Schemas
@@ -56,6 +57,10 @@ class SUserRegister(UserBase):
     confirm_password: str = Field(
         min_length=5, max_length=50, description="Повторите пароль"
     )
+    role: Optional[UserRole] = Field(
+        default=None,
+        description="Желаемая роль пользователя",
+    )
 
     @model_validator(mode="after")
     def check_password(self):
@@ -84,6 +89,10 @@ class SUserUpdate(BaseModel):
     confirm_password: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
+
+
+class SUserRoleUpdate(BaseModel):
+    role: UserRole
 
 
 class SUserInfo(UserBase):

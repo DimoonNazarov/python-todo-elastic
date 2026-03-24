@@ -36,6 +36,7 @@ class AuthRepository:
 
     async def find_all(self, filter_dict: dict = None) -> Sequence[User]:
         """Найти всех пользователей по фильтрам"""
+        filter_dict = filter_dict or {}
         stmt = select(User).filter_by(**filter_dict)
         result = await self._session.execute(stmt)
         return result.scalars().all()
@@ -107,6 +108,7 @@ class AuthRepository:
 
     async def count(self, filter_dict: dict | None = None) -> int:
         """Подсчитать количество пользователей по фильтрам"""
+        filter_dict = filter_dict or {}
         stmt = select(func.count(User.id)).filter_by(**filter_dict)
         result = await self._session.execute(stmt)
         return result.scalar()

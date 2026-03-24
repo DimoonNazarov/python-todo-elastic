@@ -7,8 +7,12 @@ from app.dependencies import get_auth_service
 from app.exceptions import (
     InvalidCredentials,
 )
-from app.utils import OAuth2PasswordBearerWithCookie, extract_bearer_token
-from app.schemas import SUserRegister, SUserAuth, SUserInfo, Token
+from app.utils import (
+    OAuth2PasswordBearerWithCookie,
+    extract_bearer_token,
+    verify_access_token,
+)
+from app.schemas import SUserRegister, SUserAuth, SUserInfo, SUserRoleUpdate, Token, UserRole
 from app.core import get_async_uow_session, UnitOfWork
 from app.services import AuthService
 from app.routers.dependencies import get_current_user, get_current_active_user
@@ -18,6 +22,54 @@ from app.config import settings
 templates = Jinja2Templates(directory="app/templates")
 auth_router = APIRouter(prefix="/auth", tags=["Auth"])
 oauth2_scheme = OAuth2PasswordBearerWithCookie(tokenUrl="token")
+
+
+async def _get_optional_current_active_user(
+    request: Request,
+    uow_session: UnitOfWork,
+) -> SUserInfo | None:
+    raw_token = request.cookies.get("access_token")
+    token = extract_bearer_token(raw_token) if raw_token else None
+    if not token:
+        return None
+
+    payload = verify_access_token(token)
+    if not payload:
+        return None
+
+    async with uow_session.start():
+        user = await uow_session.auth.find_one_or_none_by_id(int(payload["user_id"]))
+        if not user or not user.is_active:
+            return None
+        return SUserInfo.model_validate(user)
+
+
+async def _build_register_context(
+    request: Request,
+    uow_session: UnitOfWork,
+) -> dict:
+    current_user = await _get_optional_current_active_user(request, uow_session)
+    async with uow_session.start():
+        users_count = await uow_session.auth.count()
+
+    first_user = users_count == 0
+    can_choose_role = first_user or (
+        current_user is not None and current_user.role == UserRole.ADMIN
+    )
+    default_role = UserRole.ADMIN.value if first_user else UserRole.EDITOR.value
+
+    return {
+        "request": request,
+        "can_choose_role": can_choose_role,
+        "default_role": default_role,
+        "first_user": first_user,
+        "role_options": [
+            {"value": UserRole.ADMIN.value, "label": "Администратор"},
+            {"value": UserRole.EDITOR.value, "label": "Редактор"},
+            {"value": UserRole.VIEWER.value, "label": "Пользователь"},
+        ],
+        "current_user": current_user,
+    }
 
 
 def _set_auth_cookies(response: Response, tokens: Token) -> None:
@@ -71,8 +123,21 @@ async def login(
 
 
 @auth_router.get("/register", response_class=HTMLResponse)
-async def get_register(request: Request):
-    return templates.TemplateResponse("register.html", {"request": request})
+async def get_register(
+    request: Request,
+    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+):
+    context = await _build_register_context(request, uow_session)
+    if not context["first_user"] and (
+        context["current_user"] is None
+        or context["current_user"].role != UserRole.ADMIN
+    ):
+        return RedirectResponse(url="/todo/home/", status_code=status.HTTP_303_SEE_OTHER)
+
+    return templates.TemplateResponse(
+        "register.html",
+        context,
+    )
 
 
 @auth_router.post("/register", response_class=HTMLResponse)
@@ -82,7 +147,12 @@ async def register(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ):
-    await auth_service.register_user(uow_session=uow_session, user_data=user_data)
+    current_user = await _get_optional_current_active_user(request, uow_session)
+    await auth_service.register_user(
+        uow_session=uow_session,
+        user_data=user_data,
+        current_user=current_user,
+    )
 
     return RedirectResponse(url="/auth/login", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -195,6 +265,23 @@ async def read_active_users(
         }
         for user in users
     ]
+
+
+@auth_router.patch("/users/{user_id}/role")
+async def update_user_role(
+    user_id: int,
+    role_data: SUserRoleUpdate,
+    current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
+    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+):
+    updated_user = await auth_service.update_user_role(
+        user_id=user_id,
+        new_role=role_data.role,
+        current_user=current_user,
+        uow_session=uow_session,
+    )
+    return JSONResponse(updated_user)
 
 
 @auth_router.delete("/users/{user_id}")
