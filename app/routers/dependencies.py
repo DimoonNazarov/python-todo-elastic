@@ -12,6 +12,20 @@ async def get_current_user(request: Request) -> dict:
     return payload
 
 
+async def get_optional_current_active_user(
+    request: Request,
+    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+) -> SUserInfo | None:
+    payload = getattr(request.state, "user", None)
+    if payload is None:
+        return None
+    async with uow_session.start():
+        user: UserORM = await uow_session.auth.find_one_or_none_by_id(int(payload["user_id"]))
+        if not user or not user.is_active:
+            return None
+        return SUserInfo.model_validate(user)
+
+
 async def get_current_active_user(
     payload: Annotated[dict, Depends(get_current_user)],
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],

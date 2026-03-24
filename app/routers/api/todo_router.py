@@ -24,8 +24,6 @@ from app.dependencies import get_todo_service
 from app.routers.dependencies import get_current_user, get_current_active_user
 from app.schemas import TodoSource, Todo, Tags, SUserInfo, UserRole
 from app.services.search_index import enrich_todo_display
-from app.services.search_index import enrich_todo_display_list
-from app.services.search_index import merge_search_hits_with_todos
 from app.services.todo import TodoService
 from app.utils import (
     import_todos,

@@ -10,12 +10,11 @@ from app.exceptions import (
 from app.utils import (
     OAuth2PasswordBearerWithCookie,
     extract_bearer_token,
-    verify_access_token,
 )
 from app.schemas import SUserRegister, SUserAuth, SUserInfo, SUserRoleUpdate, Token, UserRole
 from app.core import get_async_uow_session, UnitOfWork
 from app.services import AuthService
-from app.routers.dependencies import get_current_user, get_current_active_user
+from app.routers.dependencies import get_current_active_user, get_optional_current_active_user
 from app.config import settings
 
 # pylint: disable=invalid-name
@@ -24,31 +23,11 @@ auth_router = APIRouter(prefix="/auth", tags=["Auth"])
 oauth2_scheme = OAuth2PasswordBearerWithCookie(tokenUrl="token")
 
 
-async def _get_optional_current_active_user(
-    request: Request,
-    uow_session: UnitOfWork,
-) -> SUserInfo | None:
-    raw_token = request.cookies.get("access_token")
-    token = extract_bearer_token(raw_token) if raw_token else None
-    if not token:
-        return None
-
-    payload = verify_access_token(token)
-    if not payload:
-        return None
-
-    async with uow_session.start():
-        user = await uow_session.auth.find_one_or_none_by_id(int(payload["user_id"]))
-        if not user or not user.is_active:
-            return None
-        return SUserInfo.model_validate(user)
-
-
 async def _build_register_context(
     request: Request,
     uow_session: UnitOfWork,
 ) -> dict:
-    current_user = await _get_optional_current_active_user(request, uow_session)
+    current_user = await get_optional_current_active_user(request, uow_session)
     async with uow_session.start():
         users_count = await uow_session.auth.count()
 
@@ -147,7 +126,7 @@ async def register(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ):
-    current_user = await _get_optional_current_active_user(request, uow_session)
+    current_user = await get_optional_current_active_user(request, uow_session)
     await auth_service.register_user(
         uow_session=uow_session,
         user_data=user_data,
