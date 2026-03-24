@@ -2,8 +2,7 @@ import logging
 from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.engine import Result, CursorResult
-from typing import Optional, List
+from sqlalchemy.engine import CursorResult
 from datetime import datetime, timezone
 
 from app.models import RefreshToken
@@ -22,9 +21,9 @@ class TokenRepository:
         refresh_token: str,
         user_id: int,
         expires_at: datetime,
-        user_agent: Optional[str] = None,
-        ip_address: Optional[str] = None,
-    ) -> Optional[RefreshToken]:
+        user_agent: str | None = None,
+        ip_address: str | None = None,
+    ) -> RefreshToken | None:
         """
         Создать новый refresh token
 
@@ -60,9 +59,9 @@ class TokenRepository:
             return token_record
 
         except SQLAlchemyError as e:
-            logger.error("Ошибка при создании refresh token: {}".format(e))
+            logger.error("Ошибка при создании refresh token: %s", e)
 
-    async def find_by_token(self, refresh_token: str) -> Optional[RefreshToken]:
+    async def find_by_token(self, refresh_token: str) -> RefreshToken | None:
         """
         Найти refresh token по значению
 
@@ -80,13 +79,13 @@ class TokenRepository:
             token = result.scalar_one_or_none()
 
             if token:
-                logger.debug("Refresh token найден: ID {}".format(token.id))
+                logger.debug("Refresh token найден: ID %s", token.id)
             else:
                 logger.debug("Refresh token не найден")
 
             return token
         except SQLAlchemyError as e:
-            logger.error("Ошибка при поиске refresh token: {}".format(e))
+            logger.error("Ошибка при поиске refresh token: %s", e)
             raise
 
     async def validate_refresh_token(self, refresh_token: str) -> RefreshToken | None:
@@ -105,13 +104,13 @@ class TokenRepository:
             logger.warning("Refresh token не найден в БД")
             return None
         if token.revoked:
-            logger.warning("Refresh token {} был отозван".format(token.id))
+            logger.warning("Refresh token %s был отозван", token.id)
             return None
         if token.expires_at < datetime.now(timezone.utc):
-            logger.warning("Refresh token {} истек".format(token.id))
+            logger.warning("Refresh token %s истек", token.id)
             return None
 
-        logger.debug("Refresh token {} валиден".format(token.id))
+        logger.debug("Refresh token %s валиден", token.id)
         return token
 
     async def revoke_refresh_token(self, refresh_token: str) -> bool:
@@ -132,7 +131,7 @@ class TokenRepository:
             token.revoked = True
             await self._session.flush()
 
-            logger.info("Refresh token {} отозван".format(token.id))
+            logger.info("Refresh token %s отозван", token.id)
             return True
         except SQLAlchemyError as e:
             logger.error("Ошибка при отзыве токена: {}".format(e))
@@ -157,26 +156,22 @@ class TokenRepository:
                 token.revoked = True
 
             await self._session.flush()
-            logger.info(
-                "Отозвано {} токенов для пользователя {}".format(count, user_id)
-            )
+            logger.info("Отозвано %s токенов для пользователя %s", count, user_id)
+
             return count
         except SQLAlchemyError as e:
-            logger.error("Ошибка при отзыве всех токенов пользователя: {}".format(e))
+            logger.error("Ошибка при отзыве всех токенов пользователя: %s", e)
             raise
 
     async def get_user_tokens(
         self, user_id: int, active_only: bool
-    ) -> List[RefreshToken]:
+    ) -> list[RefreshToken]:
         """
         Получить все refresh токены пользователя
 
         Args:
             user_id: ID пользователя
             active_only: Только активные токены (не отозванные и не истекшие)
-
-        Returns:
-            Список RefreshToken
         """
         try:
             query = select(RefreshToken).where(RefreshToken.user_id == user_id)
@@ -190,12 +185,10 @@ class TokenRepository:
             result = await self._session.execute(query)
             tokens = result.scalars().all()
 
-            logger.debug(
-                "Найдено {} токенов для пользователя {}".format(len(tokens), user_id)
-            )
+            logger.debug("Найдено %s токенов для пользователя %s", len(tokens), user_id)
             return list(tokens)
         except SQLAlchemyError as e:
-            logger.error("Ошибка при получении токенов пользователя: {}".format(e))
+            logger.error("Ошибка при получении токенов пользователя: %s", e)
             raise
 
     async def cleanup_expired_tokens(self) -> int:
@@ -213,10 +206,10 @@ class TokenRepository:
             await self._session.flush()
 
             deleted_count = result.rowcount
-            logger.info("Удалено {} истекших токенов".format(deleted_count))
+            logger.info("Удалено %s истекших токенов", deleted_count)
             return deleted_count
         except SQLAlchemyError as e:
-            logger.error("Ошибка при отзыве токена: {}".format(e))
+            logger.error("Ошибка при отзыве токена: %s", e)
             raise
 
     async def delete_token(self, refresh_token: str) -> bool:
@@ -242,7 +235,7 @@ class TokenRepository:
 
             return deleted
         except SQLAlchemyError as e:
-            logger.error("Ошибка при удалении токена: {}".format(e))
+            logger.error("Ошибка при удалении токена: %s", e)
             raise
 
     async def delete_all_user_tokens(self, user_id: int) -> int:
@@ -271,7 +264,8 @@ class TokenRepository:
             logger.error("Ошибка при удалении токенов пользователя: %s", e)
             raise
 
-    async def count_active_user_tokens(self, user_id) -> int:
+
+    async def count_active_user_tokens(self, user_id: int) -> int:
         """
         Подсчитать количество активных токенов пользователя
 

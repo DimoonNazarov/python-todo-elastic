@@ -1,5 +1,4 @@
 from elasticsearch import AsyncElasticsearch, NotFoundError
-from typing import Optional, List
 import logging
 from app.services.search_index import ALL_STOPWORDS
 from app.services.search_index import CLASSIFICATION_REPLACEMENTS
@@ -165,7 +164,7 @@ class ElasticRepository:
         """Удаляет документ задачи из индекса."""
         try:
             await self._client.delete(index=INDEX_NAME, id=str(todo_id))
-            logger.info(f"Deleted todo {todo_id} from index")
+            logger.info("Deleted todo %s from index", todo_id )
         except NotFoundError:
             logger.warning("Todo %s not found in index on delete.", todo_id)
         except Exception as e:
@@ -179,6 +178,7 @@ class ElasticRepository:
         skip: int = 0,
         author_id: Optional[int] = None,
     ) -> List[dict]:
+
         """
         Полнотекстовый поиск по title и details с нестрогим соответствием.
         Использует русский анализатор для учета морфологии.
@@ -284,7 +284,7 @@ class ElasticRepository:
                     result["highlight"] = hit["highlight"]
                 results.append(result)
 
-            logger.info(f"Search for '{query_text}' found {len(results)} results")
+            logger.info("Search for '%s' found %d results", query_text, len(results))
             return results
 
         except Exception as e:
@@ -293,7 +293,7 @@ class ElasticRepository:
 
     async def search_by_classification(
         self, classification: str, limit: int = 50
-    ) -> List[dict]:
+    ) -> list[dict]:
         """Поиск тудушек по уровню секретности"""
         try:
             response = await self._client.search(
@@ -306,7 +306,7 @@ class ElasticRepository:
             )
             return [hit["_source"] for hit in response["hits"]["hits"]]
         except Exception as e:
-            logger.error(f"Search by classification failed: {e}")
+            logger.error("Search by classification failed: %s", e)
             return []
 
     async def get_statistics(self) -> dict:
@@ -344,7 +344,7 @@ class ElasticRepository:
             return stats
 
         except Exception as e:
-            logger.error(f"Failed to get statistics: {e}")
+            logger.error("Failed to get statistics: %s", e  )
             return {}
 
     async def search_by_date(
@@ -364,9 +364,10 @@ class ElasticRepository:
                     "sort": [{"created_at": {"order": "desc"}}],
                 },
             )
+
             return [hit["_source"] for hit in response["hits"]["hits"]]
         except Exception as e:
-            logger.error(f"Failed to get search results: {e}")
+            logger.error( "Failed to get search results: %s", e)
             return []
 
     async def search_by_tag(
@@ -386,9 +387,10 @@ class ElasticRepository:
                     "sort": [{"created_at": {"order": "desc"}}],
                 },
             )
+
             return [hit["_source"] for hit in response["hits"]["hits"]]
         except Exception as e:
-            logger.error(f"Failed to get search results: {e}")
+            logger.error( "Failed to get search results: %s", e)
             return []
 
     async def get_all_todos(
@@ -451,7 +453,7 @@ class ElasticRepository:
             ]
 
         except Exception as e:
-            logger.error(f"Failed to get top words: {e}")
+            logger.error("Failed to get top words: %s", e)
             return []
 
     async def get_notes_per_day(
@@ -502,5 +504,5 @@ class ElasticRepository:
             return result
 
         except Exception as e:
-            logger.error(f"Failed to get notes per day: {e}")
+            logger.error("Failed to get notes per day: %s", e)
             return []
