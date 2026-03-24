@@ -2,7 +2,6 @@ import logging
 import math
 import random
 from datetime import datetime, UTC
-from typing import Optional
 from collections.abc import Sequence
 from fastapi import UploadFile
 
@@ -23,6 +22,8 @@ from app.utils import (
     delete_image,
     hash_image,
 )
+from app.services.search_index import enrich_todo_display_list
+from app.services.search_index import merge_search_hits_with_todos
 
 logger = logging.getLogger(__name__)
 
@@ -107,13 +108,25 @@ class TodoService:
         await uow_session.elastic.ensure_index_exists()
         await uow_session.elastic.index_document(todo_id, document)
 
-
     @staticmethod
     def _parse_data(date_str: str | None) -> datetime | None:
         """Парсит строку с датой или возвращает None"""
         if not date_str:
             return None
         return datetime.strptime(date_str, "%Y-%m-%d")
+
+    @staticmethod
+    async def _get_search_todos_from_hits(
+        uow_session: UnitOfWork,
+        hits: list[dict],
+    ) -> list[dict]:
+        todo_ids = [hit["todo_id"] for hit in hits]
+        if not todo_ids:
+            return []
+
+        async with uow_session.start():
+            todos = await uow_session.todo.get_todos_by_ids(todo_ids)
+        return merge_search_hits_with_todos(hits, todos)
 
     async def create(
         self,
@@ -122,7 +135,7 @@ class TodoService:
         details: str,
         tag: Tags,
         source: TodoSource,
-        image: Optional[UploadFile],
+        image: UploadFile | None,
         author_id: int,
     ) -> None:
 
@@ -161,6 +174,92 @@ class TodoService:
             await self._sync_todo_to_search_index(uow_session, todo.id)
         except Exception as e:
             logger.error("Elastic indexing failed: %s", e)
+
+    async def get_todos_page(
+        self,
+         uow_session: UnitOfWork,
+         current_user: SUserInfo,
+         limit: int,
+         skip: int,
+         created_from: str | None,
+         created_to: str | None,
+         tag: Tags | None,
+         query: str | None,
+         search_tag: str | None,
+         search_date_from: str | None,
+    ) -> dict:
+        author_id = current_user.id if current_user.role == UserRole.VIEWER else None
+
+        if query:
+            logger.debug("Поиск по запросу: %s", query)
+            hits = await uow_session.elastic.search_todos(
+                query_text=query,
+                tag=tag.value if tag else None,
+                limit=limit,
+                skip=skip,
+                author_id=author_id,
+            )
+            todos = await self._get_search_todos_from_hits(uow_session, hits)
+            return {
+                "todos": todos,
+                "skip": 0,
+                "pages": 1,
+                "search_mode": "query",
+                "subtitle": "Результаты поиска по запросу: %s" % query,
+            }
+
+        if search_tag:
+            tag_display = search_tag.capitalize()
+
+            logger.debug("Поиск по тегу: %s", tag_display)
+            todos = enrich_todo_display_list(
+                await uow_session.elastic.search_by_tag(
+                    search_tag.capitalize(),
+                    author_id=author_id,
+                )
+            )
+            return {
+                "todos": todos,
+                "skip": 0,
+                "pages": 1,
+                "search_mode": "tag",
+                "subtitle": "Результаты поиска по тегу: %s" % tag_display,
+            }
+
+        if search_date_from:
+            date_from_dt = datetime.fromisoformat(search_date_from)
+            logger.debug("Поиск по дате от: %s", date_from_dt)
+            todos = enrich_todo_display_list(
+                await uow_session.elastic.search_by_date(
+                    date_from_dt.isoformat(), author_id=author_id
+                )
+            )
+            return {
+                "todos": todos,
+                "skip": 0,
+                "pages": 1,
+                "search_mode": "date",
+                "subtitle": "Результаты поиска после %s"
+                % date_from_dt.strftime("%d.%m.%Y %H:%M"),
+            }
+
+        todos, skip, pages = await self.get_todos(
+            uow_session=uow_session,
+            current_user=current_user,
+            limit=limit,
+            skip=skip,
+            created_from=created_from,
+            created_to=created_to,
+            tag=tag,
+        )
+
+        return {
+            "todos": todos,
+            "skip": skip,
+            "pages": pages,
+            "search_mode": None,
+            "subtitle": None,
+        }
 
     async def get_todos(
         self,

@@ -1,6 +1,7 @@
 import base64
 import logging
 import io
+import os
 from typing import Any
 import squarify
 import shutil
@@ -42,19 +43,6 @@ todo_router = APIRouter(prefix="/todo", tags=["Todo"])
 templates = Jinja2Templates(directory="app/templates")
 
 logger = logging.getLogger(__name__)
-
-
-async def _get_search_todos_from_hits(
-    uow_session: UnitOfWork,
-    hits: list[dict],
-) -> list[dict]:
-    todo_ids = [hit["todo_id"] for hit in hits]
-    if not todo_ids:
-        return []
-
-    async with uow_session.start():
-        todos = await uow_session.todo.get_todos_by_ids(todo_ids)
-    return merge_search_hits_with_todos(hits, todos)
 
 
 def _todos_page_context(
@@ -131,83 +119,7 @@ async def get_todos(
     search_date_from: str | None = None,
     todo_service: TodoService = Depends(get_todo_service),
 ):
-    author_id = current_user.id if current_user.role == UserRole.VIEWER else None
-
-    if query:
-        hits = await uow_session.elastic.search_todos(
-            query_text=query,
-            tag=tag.value if tag else None,
-            limit=limit,
-            skip=skip,
-            author_id=author_id,
-        )
-        todos = await _get_search_todos_from_hits(uow_session, hits)
-        return templates.TemplateResponse(
-            "todos.html",
-            _todos_page_context(
-                request,
-                todos=todos,
-                limit=limit,
-                skip=0,
-                pages=1,
-                created_from=created_from,
-                created_to=created_to,
-                tag=tag,
-                search_query=query,
-                search_mode="query",
-                subtitle=f"Результаты поиска по запросу: {query}",
-            ),
-        )
-
-    if search_tag:
-        results = enrich_todo_display_list(
-            await uow_session.elastic.search_by_tag(
-                search_tag.capitalize(),
-                author_id=author_id,
-            )
-        )
-        return templates.TemplateResponse(
-            "todos.html",
-            _todos_page_context(
-                request,
-                todos=results,
-                limit=limit,
-                skip=0,
-                pages=1,
-                created_from=created_from,
-                created_to=created_to,
-                tag=tag,
-                search_mode="tag",
-                subtitle=f"Результаты поиска по тегу: {search_tag.capitalize()}",
-            ),
-        )
-
-    if search_date_from:
-        date_from_dt = datetime.fromisoformat(search_date_from)
-        results = enrich_todo_display_list(
-            await uow_session.elastic.search_by_date(
-                date_from_dt.isoformat(),
-                author_id=author_id,
-            )
-        )
-        return templates.TemplateResponse(
-            "todos.html",
-            _todos_page_context(
-                request,
-                todos=results,
-                limit=limit,
-                skip=0,
-                pages=1,
-                created_from=created_from,
-                created_to=created_to,
-                tag=tag,
-                search_date_from=search_date_from,
-                search_mode="date",
-                subtitle=f"Результаты поиска после {date_from_dt.strftime('%d.%m.%Y %H:%M')}",
-            ),
-        )
-
-    todos, skip, pages = await todo_service.get_todos(
+    result = await todo_service.get_todos_page(
         uow_session=uow_session,
         current_user=current_user,
         limit=limit,
@@ -215,19 +127,26 @@ async def get_todos(
         created_from=created_from,
         created_to=created_to,
         tag=tag,
+        query=query,
+        search_tag=search_tag,
+        search_date_from=search_date_from,
     )
 
     return templates.TemplateResponse(
         "todos.html",
         _todos_page_context(
             request,
-            todos=todos,
+            todos=result["todos"],
             limit=limit,
-            skip=skip,
-            pages=pages,
+            skip=result["skip"],
+            pages=result["pages"],
             created_from=created_from,
             created_to=created_to,
             tag=tag,
+            search_query=query,
+            search_date_from=search_date_from,
+            search_mode=result["search_mode"],
+            subtitle=result["subtitle"],
         ),
     )
 
@@ -520,9 +439,7 @@ async def generate_todos(
 ):
     """Generate a number of random todos for the current user."""
     if count < 1 or count > 200:
-        raise HTTPException(
-            status_code=422, detail="Count must be between 1 and 200"
-        )
+        raise HTTPException(status_code=422, detail="Count must be between 1 and 200")
 
     logger.info("Generating %s todos for user %s", count, user.id)
     try:
