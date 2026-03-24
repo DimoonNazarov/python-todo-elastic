@@ -3,8 +3,6 @@ import logging
 import io
 from typing import Any
 import squarify
-import os
-import asyncio
 import shutil
 import matplotlib.pyplot as plt
 import seaborn as sb
@@ -475,33 +473,29 @@ async def show_generate(request: Request):
 
 
 @todo_router.post("/generate/", status_code=status.HTTP_200_OK)
-async def generate_todos(count: int = Form(20)):
-    """Generate a number of todos by calling a bash script."""
-    logger.info(f"Generating {count} todos")
-    script_directory = os.path.dirname(__file__)
-    script_path = os.path.join(script_directory, "../scripts/generate.sh")
-
-    try:
-        process = await asyncio.create_subprocess_exec(
-            "bash",
-            script_path,
-            str(count),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+async def generate_todos(
+    user: Annotated[SUserInfo, Depends(get_current_active_user)],
+    todo_service: Annotated[TodoService, Depends(get_todo_service)],
+    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+    count: int = Form(20),
+):
+    """Generate a number of random todos for the current user."""
+    if count < 1 or count > 200:
+        raise HTTPException(
+            status_code=422, detail="Count must be between 1 and 200"
         )
 
-        stdout, stderr = await process.communicate()
-
-        if process.returncode != 0:
-            logger.error(f"Error during execution: {stderr.decode()}")
-            raise HTTPException(
-                status_code=500, detail=f"Error during execution: {stderr.decode()}"
-            )
-
+    logger.info("Generating %s todos for user %s", count, user.id)
+    try:
+        await todo_service.generate_random_todos(
+            uow_session=uow_session,
+            count=count,
+            author_id=user.id,
+        )
         logger.info("Todos generated successfully")
-        return {"status": "success", "details": stdout.decode()}
+        return {"status": "success", "details": f"Generated {count} todos"}
     except Exception as e:
-        logger.error(f"An error occurred: {str(e)}")
+        logger.error("An error occurred during todo generation: %s", e)
         raise HTTPException(
             status_code=500, detail="An error occurred while generating todos"
         )
