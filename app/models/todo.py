@@ -40,6 +40,7 @@ class Todo(Base):
     source: Mapped[str] = mapped_column(nullable=False, default=TodoSource.created)
     image_path: Mapped[str | None] = mapped_column(nullable=True, default=None)
     image_hash: Mapped[str | None] = mapped_column(nullable=True, default=None)
+    spacy_summary: Mapped[str | None] = mapped_column(nullable=True, default=None)
 
     author = relationship(
         "User", foreign_keys=[author_id], back_populates="todos"  # Явно указываем

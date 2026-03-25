@@ -34,7 +34,12 @@ class TodoRepository:
 
     async def get_todo_by_id(self, todo_id: int) -> Todo | None:
         result = await self._session.execute(
-            select(Todo).options(selectinload(Todo.author)).where(Todo.id == todo_id)
+            select(Todo)
+            .options(
+                selectinload(Todo.author),
+                selectinload(Todo.updated_by_user),
+            )
+            .where(Todo.id == todo_id)
         )
         return result.scalar_one_or_none()
 
@@ -50,7 +55,10 @@ class TodoRepository:
 
         stmt = (
             select(Todo)
-            .options(selectinload(Todo.author))
+            .options(
+                selectinload(Todo.author),
+                selectinload(Todo.updated_by_user),
+            )
             .order_by(desc(Todo.id))
             .offset(skip * limit)
             .limit(limit)
@@ -70,13 +78,23 @@ class TodoRepository:
 
     async def get_todos_by_ids(self, todo_ids: list[int]) -> Sequence[Todo]:
         result = await self._session.execute(
-            select(Todo).options(selectinload(Todo.author)).where(Todo.id.in_(todo_ids))
+            select(Todo)
+            .options(
+                selectinload(Todo.author),
+                selectinload(Todo.updated_by_user),
+            )
+            .where(Todo.id.in_(todo_ids))
         )
         return result.scalars().all()
 
     async def get_all(self) -> Sequence[Todo]:
         result = await self._session.execute(
-            select(Todo).options(selectinload(Todo.author)).order_by(desc(Todo.id))
+            select(Todo)
+            .options(
+                selectinload(Todo.author),
+                selectinload(Todo.updated_by_user),
+            )
+            .order_by(desc(Todo.id))
         )
         return result.scalars().all()
 
@@ -92,6 +110,18 @@ class TodoRepository:
         values["updated_by"] = user_id
         await self._session.execute(
             update(Todo).where(Todo.id == todo_id).values(**values)
+        )
+
+    async def update_summary(
+        self,
+        todo_id: int,
+        spacy_summary: str | None,
+        user_id: int,
+    ) -> None:
+        await self.update(
+            todo_id=todo_id,
+            values={"spacy_summary": spacy_summary},
+            user_id=user_id,
         )
 
     async def delete_todo(self, todo_id: int):
@@ -134,7 +164,10 @@ class TodoRepository:
         """Получить все todd пользоователя"""
         result = await self._session.execute(
             select(Todo)
-            .options(selectinload(Todo.author))
+            .options(
+                selectinload(Todo.author),
+                selectinload(Todo.updated_by_user),
+            )
             .where(Todo.author_id == author_id)
             .order_by(desc(Todo.id))
         )

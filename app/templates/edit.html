@@ -28,7 +28,7 @@
     <div class="form-check form-switch">
         <label class="form-check-label" for="flexSwitchCheckChecked">Выполнено</label>
         <input {% if todo.completed %}checked{% endif %} class="form-check-input" type="checkbox"
-               id="flexSwitchCheckChecked" name="completed" >
+               id="flexSwitchCheckChecked" name="completed">
     </div>
 
     <div class="position-relative mb-2">
@@ -62,7 +62,7 @@
     <div class="form-group">
         <label>Кто редактировал:</label>
         <input type="text" class="form-control"
-           value="{% if todo.updated_by %}Пользователь ID {{ todo.updated_by }}{% else %}—{% endif %}"
+           value="{% if todo.updated_by_user %}{{ todo.updated_by_user.email }}{% elif todo.updated_by %}Пользователь ID {{ todo.updated_by }}{% else %}—{% endif %}"
            readonly>
     </div>
 
@@ -73,10 +73,32 @@
                readonly>
     </div>
 
+    <div class="card mt-2">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+                <div>
+                    <h4 class="h5 mb-1">Реферат через spaCy</h4>
+                    <p class="text-muted small mb-0">Краткое изложение сути заметки на основе русского NLP-пайплайна.</p>
+                </div>
+                <button type="button" id="generateSummaryButton" class="btn btn-outline-primary">
+                    Сформировать реферат
+                </button>
+            </div>
+
+            <div id="summaryMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+            <textarea
+                id="spacySummary"
+                class="form-control mt-3"
+                rows="5"
+                readonly
+            >{{ todo.spacy_summary or '' }}</textarea>
+        </div>
+    </div>
+
     <div class="form-group">
         <label for="image">Выберите изображение:</label>
         <input type="file" class="form-control" id="image" name="image" accept="image/*">
-        {% if todo.image_path  %}
+        {% if todo.image_path %}
         <img src="{{ url_for('images', path=todo.image_path) }}" style="max-width: 100%; margin-top: 10px;" alt="todo">
         {% endif %}
     </div>
@@ -112,11 +134,25 @@
         z-index: 100;
         max-height: 220px;
         overflow-y: auto;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     }
-    .tag-option { padding: 8px 14px; cursor: pointer; font-size: 14px; }
-    .tag-option:hover, .tag-option.active { background: #f0f4ff; }
-    .tag-option.create-new { color: #0d6efd; font-style: italic; border-top: 1px solid #dee2e6; }
+
+    .tag-option {
+        padding: 8px 14px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+    .tag-option:hover,
+    .tag-option.active {
+        background: #f0f4ff;
+    }
+
+    .tag-option.create-new {
+        color: #0d6efd;
+        font-style: italic;
+        border-top: 1px solid #dee2e6;
+    }
 </style>
 
 <script>
@@ -139,17 +175,50 @@
             method: 'PUT',
             body: formData
         })
-                .then(res => res.json())
-                .then(data => {
-                    console.log('Успешно:', data);
-                    window.location.href = '/todo/list/?limit={{ limit }}&skip={{ skip }}';
-                })
-                .catch(error => console.error('Ошибка:', error));
+            .then(res => res.json())
+            .then(data => {
+                console.log('Успешно:', data);
+                window.location.href = '/todo/list/?limit={{ limit }}&skip={{ skip }}';
+            })
+            .catch(error => console.error('Ошибка:', error));
 
         this.reset();
     });
 
-    // ── Tag autocomplete ──────────────────────────────────────
+    const generateSummaryButton = document.getElementById('generateSummaryButton');
+    const summaryMessage = document.getElementById('summaryMessage');
+    const spacySummary = document.getElementById('spacySummary');
+
+    function showSummaryMessage(text, kind = 'success') {
+        summaryMessage.className = `alert alert-${kind} mt-3 mb-0`;
+        summaryMessage.textContent = text;
+        summaryMessage.classList.remove('d-none');
+    }
+
+    generateSummaryButton.addEventListener('click', async () => {
+        generateSummaryButton.disabled = true;
+        generateSummaryButton.textContent = 'Формируем...';
+
+        try {
+            const response = await fetchWithAuth('/todo/summarize/{{ todo.id }}/', {
+                method: 'POST'
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Не удалось сформировать реферат');
+            }
+
+            spacySummary.value = data.spacy_summary || '';
+            showSummaryMessage('Реферат успешно сформирован и сохранён.', 'success');
+        } catch (error) {
+            showSummaryMessage(error.message || 'Не удалось сформировать реферат.', 'danger');
+        } finally {
+            generateSummaryButton.disabled = false;
+            generateSummaryButton.textContent = 'Сформировать реферат';
+        }
+    });
+
     const tagInput = document.getElementById('tagInput');
     const tagDropdown = document.getElementById('tagDropdown');
     let activeIndex = -1;
@@ -167,9 +236,13 @@
             const div = document.createElement('div');
             div.className = 'tag-option';
             div.textContent = name;
-            div.addEventListener('mousedown', () => { tagInput.value = name; tagDropdown.classList.add('d-none'); });
+            div.addEventListener('mousedown', () => {
+                tagInput.value = name;
+                tagDropdown.classList.add('d-none');
+            });
             tagDropdown.appendChild(div);
         });
+
         const trimmed = query.trim();
         const exactExists = suggestions.some(s => s.toLowerCase() === trimmed.toLowerCase());
         if (trimmed && !exactExists) {
@@ -177,13 +250,15 @@
             div.className = 'tag-option create-new';
             div.textContent = `+ Создать тег «${trimmed}»`;
             div.addEventListener('mousedown', async () => {
-                const fd = new FormData(); fd.append('name', trimmed);
+                const fd = new FormData();
+                fd.append('name', trimmed);
                 await fetchWithAuth('/todo/api/tags/', {method: 'POST', body: fd});
                 tagInput.value = trimmed;
                 tagDropdown.classList.add('d-none');
             });
             tagDropdown.appendChild(div);
         }
+
         tagDropdown.classList.toggle('d-none', tagDropdown.children.length === 0);
     }
 
@@ -194,41 +269,57 @@
             renderDropdown(await fetchSuggestions(tagInput.value), tagInput.value);
         }, 200);
     });
+
     tagInput.addEventListener('focus', async () => {
         renderDropdown(await fetchSuggestions(tagInput.value), tagInput.value);
     });
+
     tagInput.addEventListener('blur', () => setTimeout(() => tagDropdown.classList.add('d-none'), 150));
     tagInput.addEventListener('keydown', (e) => {
         const items = tagDropdown.querySelectorAll('.tag-option');
-        if (e.key === 'ArrowDown') { e.preventDefault(); activeIndex = Math.min(activeIndex + 1, items.length - 1); }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); activeIndex = Math.max(activeIndex - 1, -1); }
-        else if (e.key === 'Enter' && activeIndex >= 0) { e.preventDefault(); items[activeIndex].dispatchEvent(new MouseEvent('mousedown')); return; }
-        else if (e.key === 'Escape') { tagDropdown.classList.add('d-none'); return; }
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIndex = Math.min(activeIndex + 1, items.length - 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIndex = Math.max(activeIndex - 1, -1);
+        } else if (e.key === 'Enter' && activeIndex >= 0) {
+            e.preventDefault();
+            items[activeIndex].dispatchEvent(new MouseEvent('mousedown'));
+            return;
+        } else if (e.key === 'Escape') {
+            tagDropdown.classList.add('d-none');
+            return;
+        }
+
         items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
-        if (activeIndex >= 0) items[activeIndex].scrollIntoView({block: 'nearest'});
+        if (activeIndex >= 0) {
+            items[activeIndex].scrollIntoView({block: 'nearest'});
+        }
     });
 
-    // ── Clear tag button ─────────────────────────────────────
     const clearTagBtn = document.getElementById('clearTagBtn');
     clearTagBtn.addEventListener('click', () => {
         tagInput.value = '';
         tagDropdown.classList.add('d-none');
         clearTagBtn.style.display = 'none';
     });
+
     tagInput.addEventListener('input', () => {
         clearTagBtn.style.display = tagInput.value ? '' : 'none';
     });
 
-    // ── Dynamic tag links ────────────────────────────────────
-    fetchWithAuth('/todo/api/tags/').then(r => r.json()).then(data => {
-        const container = document.getElementById('tagLinks');
-        (data.tags || []).forEach(tag => {
-            const a = document.createElement('a');
-            a.href = `/todo/list/?tag=${encodeURIComponent(tag)}`;
-            a.className = 'btn btn-outline-primary btn-sm';
-            a.textContent = tag;
-            container.appendChild(a);
+    fetchWithAuth('/todo/api/tags/')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('tagLinks');
+            (data.tags || []).forEach(tag => {
+                const a = document.createElement('a');
+                a.href = `/todo/list/?tag=${encodeURIComponent(tag)}`;
+                a.className = 'btn btn-outline-primary btn-sm';
+                a.textContent = tag;
+                container.appendChild(a);
+            });
         });
-    });
 </script>
 {% endblock content %}

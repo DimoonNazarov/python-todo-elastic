@@ -7,6 +7,7 @@ __all__ = [
     "enrich_todo_display_list",
     "mask_classification",
     "merge_search_hits_with_todos",
+    "build_spacy_summary",
 ]
 
 
@@ -30,4 +31,8 @@ def __getattr__(name: str):
         from . import search_index
 
         return getattr(search_index, name)
+    if name == "build_spacy_summary":
+        from .summary import build_spacy_summary
+
+        return build_spacy_summary
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

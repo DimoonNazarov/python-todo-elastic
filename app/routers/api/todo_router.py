@@ -466,6 +466,25 @@ async def edit_todo(
     return {"status": "success", "details": "Todo edited"}
 
 
+@todo_router.post("/summarize/{todo_id}/", status_code=status.HTTP_200_OK)
+async def summarize_todo(
+    todo_id: int,
+    user: Annotated[SUserInfo, Depends(get_current_active_user)],
+    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+    todo_service: Annotated[TodoService, Depends(get_todo_service)],
+):
+    summary = await todo_service.summarize_with_spacy(
+        uow_session=uow_session,
+        todo_id=todo_id,
+        user=user,
+    )
+    return {
+        "status": "success",
+        "details": "Spacy summary created",
+        "spacy_summary": summary,
+    }
+
+
 @todo_router.delete("/delete/{todo_id}/", status_code=status.HTTP_200_OK)
 async def delete_todo(
     current_user: Annotated[SUserInfo, Depends(get_current_active_user)],

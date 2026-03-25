@@ -1,29 +1,29 @@
 import logging
 import math
 import random
-from datetime import datetime, UTC
 from collections.abc import Sequence
+from datetime import UTC, datetime
+
 from fastapi import UploadFile
 
+from app.core import UnitOfWork
 from app.exceptions import (
+    ForbiddenException,
     InvalidPageException,
     NotFoundException,
-    ForbiddenException,
 )
-
 from app.models import Todo as TodoORM
-from app.schemas import Tags, TodoSource, SUserInfo, UserRole, Todo as TodoSchema
-from app.core import UnitOfWork
+from app.schemas import SUserInfo, Tags, Todo as TodoSchema, TodoSource, UserRole
 from app.services.search_index import build_search_document
 from app.services.search_index import enrich_todo_display_list
-from app.utils import (
-    generate_random_filename,
-    load_image,
-    delete_image,
-    hash_image,
-)
-from app.services.search_index import enrich_todo_display_list
 from app.services.search_index import merge_search_hits_with_todos
+from app.services.summary import build_spacy_summary
+from app.utils import (
+    delete_image,
+    generate_random_filename,
+    hash_image,
+    load_image,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -353,6 +353,7 @@ class TodoService:
                         created_at=created_at,
                         image_path=duplicate_image_path,
                         image_hash=image_hash,
+                        spacy_summary=todo.spacy_summary,
                     )
                 else:
                     await load_image(image, random_filename)
@@ -364,6 +365,7 @@ class TodoService:
                         created_at=created_at,
                         image_path=random_filename,
                         image_hash=image_hash,
+                        spacy_summary=todo.spacy_summary,
                     )
             elif existing_image:
                 # Берём image_hash напрямую из текущего todo если image_path совпадает
@@ -392,6 +394,7 @@ class TodoService:
                     created_at=created_at,
                     image_path=existing_image,
                     image_hash=image_hash,
+                    spacy_summary=todo.spacy_summary,
                 )
             else:
                 todo_change = TodoSchema(
@@ -402,12 +405,15 @@ class TodoService:
                     created_at=created_at,
                     image_path=image_path,
                     image_hash=todo.image_hash,
+                    spacy_summary=todo.spacy_summary,
                 )
 
             if todo_change.completed:
                 todo_change.completed_at = datetime.now(UTC)
 
             todo_change.source = TodoSource(todo.source)
+            if title != todo.title or details != todo.details:
+                todo_change.spacy_summary = None
 
             await uow_session.todo.update(
                 todo_id=todo_id,
@@ -420,6 +426,29 @@ class TodoService:
             logger.error("Elastic update failed: %s", e)
 
         return todo
+
+    async def summarize_with_spacy(
+        self,
+        uow_session: UnitOfWork,
+        todo_id: int,
+        user: SUserInfo,
+    ) -> str:
+        async with uow_session.start():
+            todo = await uow_session.todo.get_todo_by_id(todo_id)
+
+            if not todo:
+                raise NotFoundException(f"Todo with id {todo_id} not found")
+
+            if todo.author_id != user.id:
+                raise ForbiddenException("Вы можете реферировать только свои задачи")
+
+            summary = build_spacy_summary(todo.title, todo.details)
+            await uow_session.todo.update_summary(
+                todo_id=todo_id,
+                spacy_summary=summary,
+                user_id=user.id,
+            )
+            return summary
 
     async def get_todo_for_edit(
         self,
