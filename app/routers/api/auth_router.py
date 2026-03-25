@@ -1,8 +1,8 @@
 from urllib.parse import urlparse
+from typing import Annotated
 from fastapi import APIRouter, Depends, Request, status, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
-from typing import Annotated
 from app.dependencies import get_auth_service
 from app.exceptions import (
     InvalidCredentials,
@@ -11,10 +11,20 @@ from app.utils import (
     OAuth2PasswordBearerWithCookie,
     extract_bearer_token,
 )
-from app.schemas import SUserRegister, SUserAuth, SUserInfo, SUserRoleUpdate, Token, UserRole
+from app.schemas import (
+    SUserRegister,
+    SUserAuth,
+    SUserInfo,
+    SUserRoleUpdate,
+    Token,
+    UserRole,
+)
 from app.core import get_async_uow_session, UnitOfWork
 from app.services import AuthService
-from app.routers.dependencies import get_current_active_user, get_optional_current_active_user
+from app.routers.dependencies import (
+    get_current_active_user,
+    get_optional_current_active_user,
+)
 from app.config import settings
 
 # pylint: disable=invalid-name
@@ -73,12 +83,14 @@ def _set_auth_cookies(response: Response, tokens: Token) -> None:
     )
 
 
-@auth_router.get("/login", status_code=status.HTTP_200_OK)
-async def get_home(request: Request):
+@auth_router.get("/login", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
+async def get_login(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
 
-@auth_router.post("/token", response_class=HTMLResponse)
+@auth_router.post(
+    "/token", response_class=RedirectResponse, status_code=status.HTTP_302_FOUND
+)
 async def login(
     request: Request,
     user_data: SUserAuth,
@@ -111,7 +123,9 @@ async def get_register(
         context["current_user"] is None
         or context["current_user"].role != UserRole.ADMIN
     ):
-        return RedirectResponse(url="/todo/home/", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(
+            url="/todo/home/", status_code=status.HTTP_303_SEE_OTHER
+        )
 
     return templates.TemplateResponse(
         "register.html",
@@ -125,7 +139,9 @@ async def register(
     user_data: SUserRegister,
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
-    current_user: Annotated[SUserInfo | None, Depends(get_optional_current_active_user)],
+    current_user: Annotated[
+        SUserInfo | None, Depends(get_optional_current_active_user)
+    ],
 ):
     await auth_service.register_user(
         uow_session=uow_session,
@@ -136,7 +152,9 @@ async def register(
     return RedirectResponse(url="/auth/login", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@auth_router.get("/logout")
+@auth_router.get(
+    "/logout", response_class=RedirectResponse, status_code=status.HTTP_302_FOUND
+)
 async def logout(
     request: Request,
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
@@ -153,7 +171,9 @@ async def logout(
     return response
 
 
-@auth_router.post("/refresh")
+@auth_router.post(
+    "/refresh", response_class=JSONResponse, status_code=status.HTTP_200_OK
+)
 async def refresh(
     request: Request,
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
@@ -177,7 +197,11 @@ async def refresh(
     return response
 
 
-@auth_router.get("/refresh-and-redirect")
+@auth_router.get(
+    "/refresh-and-redirect",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_303_SEE_OTHER,
+)
 async def refresh_and_redirect(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
@@ -213,14 +237,18 @@ async def refresh_and_redirect(
     return response
 
 
-@auth_router.get("/users/me")
+@auth_router.get(
+    "/users/me", response_class=JSONResponse, status_code=status.HTTP_200_OK
+)
 async def read_users_me(
     current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
 ):
     return current_user
 
 
-@auth_router.get("/users/active")
+@auth_router.get(
+    "/users/active", response_class=JSONResponse, status_code=status.HTTP_200_OK
+)
 async def read_active_users(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
 ):
@@ -246,7 +274,9 @@ async def read_active_users(
     ]
 
 
-@auth_router.patch("/users/{user_id}/role")
+@auth_router.patch(
+    "/users/{user_id}/role", response_class=JSONResponse, status_code=status.HTTP_200_OK
+)
 async def update_user_role(
     user_id: int,
     role_data: SUserRoleUpdate,
@@ -263,7 +293,9 @@ async def update_user_role(
     return JSONResponse(updated_user)
 
 
-@auth_router.delete("/users/{user_id}")
+@auth_router.delete(
+    "/users/{user_id}", response_class=JSONResponse, status_code=status.HTTP_200_OK
+)
 async def delete_user(
     user_id: int,
     current_user: Annotated[SUserInfo, Depends(get_current_active_user)],

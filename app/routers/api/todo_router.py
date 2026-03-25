@@ -1,8 +1,8 @@
 import logging
 import os
-from typing import Any
 import shutil
 from datetime import datetime
+from typing import Annotated, Any
 from fastapi import (
     APIRouter,
     Request,
@@ -14,10 +14,8 @@ from fastapi import (
     Form,
 )
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse, FileResponse
-from fastapi.responses import JSONResponse
+from fastapi.responses import RedirectResponse, FileResponse, JSONResponse
 from starlette.responses import HTMLResponse
-from typing import Annotated
 
 from app.core import get_async_uow_session, UnitOfWork
 from app.dependencies import get_todo_service
@@ -121,7 +119,7 @@ def _todos_page_context(
     }
 
 
-@todo_router.get("/home/", status_code=status.HTTP_200_OK)
+@todo_router.get("/home/", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
 async def get_home(request: Request):
     """Main page with todo list"""
     logger.info("In home")
@@ -129,20 +127,24 @@ async def get_home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@todo_router.get("/401", status_code=status.HTTP_200_OK)
+@todo_router.get(
+    "/401", response_class=HTMLResponse, status_code=status.HTTP_401_UNAUTHORIZED
+)
 async def page_401(request: Request):
     """Main page with todo list"""
     return templates.TemplateResponse("401.html", {"request": request})
 
 
-@todo_router.get("/info-tasks/", status_code=status.HTTP_200_OK)
+@todo_router.get(
+    "/info-tasks/", response_class=HTMLResponse, status_code=status.HTTP_200_OK
+)
 async def get_home(request: Request):
     """Main page with todo list"""
 
     return templates.TemplateResponse("info-tasks.html", {"request": request})
 
 
-@todo_router.get("/list/", status_code=status.HTTP_200_OK)
+@todo_router.get("/list/", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
 async def get_todos(
     request: Request,
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
@@ -189,7 +191,9 @@ async def get_todos(
     )
 
 
-@todo_router.get("/search/top-words/", status_code=status.HTTP_200_OK)
+@todo_router.get(
+    "/search/top-words/", response_class=JSONResponse, status_code=status.HTTP_200_OK
+)
 async def search_by_top_words(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
@@ -263,7 +267,11 @@ async def tags_page(
     return templates.TemplateResponse("tags.html", {"request": request, "tags": tags})
 
 
-@todo_router.get("/api/tags/", dependencies=[Depends(get_current_active_user)])
+@todo_router.get(
+    "/api/tags/",
+    response_class=JSONResponse,
+    dependencies=[Depends(get_current_active_user)],
+)
 async def api_get_tags(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
 ):
@@ -272,7 +280,11 @@ async def api_get_tags(
     return JSONResponse({"tags": tags})
 
 
-@todo_router.get("/api/tags/suggest/", dependencies=[Depends(get_current_active_user)])
+@todo_router.get(
+    "/api/tags/suggest/",
+    response_class=JSONResponse,
+    dependencies=[Depends(get_current_active_user)],
+)
 async def api_suggest_tags(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     q: str = "",
@@ -285,7 +297,11 @@ async def api_suggest_tags(
     return JSONResponse({"suggestions": suggestions})
 
 
-@todo_router.post("/api/tags/", dependencies=[Depends(get_current_active_user)])
+@todo_router.post(
+    "/api/tags/",
+    response_class=JSONResponse,
+    dependencies=[Depends(get_current_active_user)],
+)
 async def api_create_tag(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     name: str = Form(...),
@@ -303,7 +319,9 @@ async def api_create_tag(
 
 
 @todo_router.delete(
-    "/api/tags/{tag_name}/", dependencies=[Depends(get_current_active_user)]
+    "/api/tags/{tag_name}/",
+    response_class=JSONResponse,
+    dependencies=[Depends(get_current_active_user)],
 )
 async def api_delete_tag(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
@@ -352,7 +370,9 @@ async def add_todo(
     return {"status": "success", "details": "Todo added"}
 
 
-@todo_router.get("/edit/{todo_id}/", status_code=status.HTTP_200_OK)
+@todo_router.get(
+    "/edit/{todo_id}/", response_class=HTMLResponse, status_code=status.HTTP_200_OK
+)
 async def get_todo(
     request: Request,
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
@@ -446,9 +466,8 @@ async def delete_todo(
     todo_id: int,
     limit: int = 10,
     skip: int = 0,
-) -> dict[str, Any]:
+) -> dict:
     """Удаление задачи только ее владельцем"""
-
     todo = await todo_service.delete(
         uow_session=uow_session, todo_id=todo_id, current_user=current_user
     )
@@ -467,13 +486,8 @@ async def delete_todos(
     todo_service: Annotated[TodoService, Depends(get_todo_service)],
     current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
-    limit: int = 10,
-    skip: int = 0,
-    start: int = 0,
-    end: int = 0,
 ):
     """Удаление всех задач текущего пользователя"""
-
     deleted_count = await todo_service.delete_all_user_todos(
         uow_session=uow_session,
         current_user=current_user,
@@ -489,7 +503,11 @@ async def delete_todos(
     }
 
 
-@todo_router.get("/visualize/", status_code=status.HTTP_200_OK)
+@todo_router.get(
+    "/visualize/",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_303_SEE_OTHER,
+)
 async def visualize_todos(
     days: int = 30,
 ):
@@ -500,12 +518,12 @@ async def visualize_todos(
     )
 
 
-@todo_router.get("/generate/", status_code=status.HTTP_200_OK)
+@todo_router.get("/generate/", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
 async def show_generate(request: Request):
     return templates.TemplateResponse("generate.html", {"request": request})
 
 
-@todo_router.post("/generate/", status_code=status.HTTP_200_OK)
+@todo_router.post("/generate/", status_code=status.HTTP_201_CREATED)
 async def generate_todos(
     user: Annotated[SUserInfo, Depends(get_current_active_user)],
     todo_service: Annotated[TodoService, Depends(get_todo_service)],
@@ -532,13 +550,17 @@ async def generate_todos(
         )
 
 
-@todo_router.get("/export/", status_code=status.HTTP_200_OK)
+@todo_router.get(
+    "/export/", response_class=HTMLResponse, status_code=status.HTTP_200_OK
+)
 async def visualize_todos(request: Request):
     """Page export and import todos from excel file"""
     return templates.TemplateResponse("export.html", {"request": request})
 
 
-@todo_router.post("/import")
+@todo_router.post(
+    "/import", response_class=RedirectResponse, status_code=status.HTTP_303_SEE_OTHER
+)
 async def import_file(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     file: UploadFile = File(...),
@@ -555,7 +577,7 @@ async def import_file(
     return RedirectResponse("/todo/home", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@todo_router.get("/import-log")
+@todo_router.get("/import-log",response_class=HTMLResponse)
 async def import_file(request: Request):
     files = os.listdir("./files/")
     return templates.TemplateResponse(
@@ -563,7 +585,7 @@ async def import_file(request: Request):
     )
 
 
-@todo_router.get("/import-log/{filename}")
+@todo_router.get("/import-log/{filename}", response_class=FileResponse)
 async def import_file(filename: str):
     file_location = os.path.join("./files/", filename)
     return FileResponse(
@@ -573,7 +595,7 @@ async def import_file(filename: str):
     )
 
 
-@todo_router.post("/export/")
+@todo_router.post("/export/", response_class=FileResponse)
 async def export_data(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
