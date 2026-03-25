@@ -12,6 +12,40 @@
         overflow-wrap: anywhere;
         word-break: break-word;
     }
+
+    .due-group-badge {
+        color: #1f2a44;
+        border: 1px solid rgba(38, 24, 63, 0.08);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    }
+
+    .due-group-badge--0 {
+        background: #efe7ff;
+    }
+
+    .due-group-badge--1 {
+        background: #e5efff;
+    }
+
+    .due-group-badge--2 {
+        background: #def5ff;
+    }
+
+    .due-group-badge--3 {
+        background: #defaf3;
+    }
+
+    .due-group-badge--4 {
+        background: #ecf8de;
+    }
+
+    .due-group-badge--5 {
+        background: #fff2d9;
+    }
+
+    .due-group-badge--6 {
+        background: #ffe3e3;
+    }
 </style>
 
 <div class="card mt-3 mb-3">
@@ -266,8 +300,7 @@
     <div class="mt-4">
         <div class="d-flex align-items-center gap-2 mb-2">
             {% if group.date %}
-            <span class="badge rounded-pill px-3 py-2 fs-6"
-                  style="background: {% if group.date.weekday() >= 5 %}#dc3545{% else %}#0d6efd{% endif %}; color: #fff;">
+            <span class="badge rounded-pill px-3 py-2 fs-6 due-group-badge due-group-badge--{{ group.date.weekday() }}">
                 {{ group.label }}
             </span>
             <span class="text-muted small">{{ group.todos | length }} {{ "задача" if group.todos | length == 1 else "задач" }}</span>
