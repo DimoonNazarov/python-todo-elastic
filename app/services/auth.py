@@ -1,10 +1,10 @@
 import logging
-from datetime import datetime, UTC, timedelta
+from datetime import datetime, UTC, timedelta, timezone
 
 from app.config import settings
 from app.schemas import SUserRegister, SUserAuth, SUserInfo, Token, UserRole
 from app.core import UnitOfWork
-from app.models import User
+from app.models import User, RefreshToken
 from app.exceptions import (
     UserAlreadyExists,
     InactiveUserException,
@@ -71,13 +71,14 @@ class AuthService:
             refresh_token_expires = datetime.now(UTC) + timedelta(
                 days=settings.REFRESH_TOKEN_EXPIRE_DAYS
             )
-            await uow_session.token.create_refresh_token(
+            await uow_session.token.add(RefreshToken(
                 refresh_token=refresh_token,
                 user_id=user.id,
                 expires_at=refresh_token_expires,
                 user_agent=user_agent,
                 ip_address=ip_address,
-            )
+                revoked=False,
+            ))
 
             logger.info("Refresh token создан для %s", user.email)
 
@@ -133,9 +134,9 @@ class AuthService:
     ) -> None:
         async with uow_session.start():
             if refresh_token:
-                await uow_session.token.revoke_refresh_token(
-                    refresh_token=refresh_token
-                )
+                token = await uow_session.token.find_by_token(refresh_token)
+                if token:
+                    token.revoked = True
 
     async def logout_all_devices(
         self,
@@ -144,7 +145,9 @@ class AuthService:
         uow_session: UnitOfWork,
     ) -> None:
         async with uow_session.start():
-            await uow_session.token.revoke_all_user_tokens(user_id=user_id)
+            tokens = await uow_session.token.get_by_user_id(user_id)
+            for token in tokens:
+                token.revoked = True
 
     async def refresh_tokens(
         self,
@@ -153,8 +156,8 @@ class AuthService:
         uow_session: UnitOfWork,
     ) -> Token:
         async with uow_session.start():
-            token_record = await uow_session.token.validate_refresh_token(refresh_token)
-            if not token_record:
+            token_record = await uow_session.token.find_by_token(refresh_token)
+            if not token_record or token_record.revoked or token_record.expires_at < datetime.now(UTC):
                 raise InvalidCredentials("Invalid or expired refresh token")
 
             user = await uow_session.auth.find_one_or_none_by_id(token_record.user_id)
@@ -162,18 +165,21 @@ class AuthService:
                 raise InvalidCredentials("User not found or inactive")
 
             # Ротация — старый отзываем, создаём новый
-            await uow_session.token.revoke_refresh_token(refresh_token)
+            token_record.revoked = True
 
             new_refresh_token = create_refresh_token()
             expires_at = datetime.now(UTC) + timedelta(
                 days=settings.REFRESH_TOKEN_EXPIRE_DAYS
             )
 
-            await uow_session.token.create_refresh_token(
+            await uow_session.token.add(RefreshToken(
                 refresh_token=new_refresh_token,
                 user_id=user.id,
                 expires_at=expires_at,
-            )
+                user_agent=token_record.user_agent,
+                ip_address=token_record.ip_address,
+                revoked=False,
+            ))
 
             token_data = {
                 "user_id": user.id,
@@ -218,7 +224,7 @@ class AuthService:
 
             await uow_session.todo.clear_updated_by_for_user(user_id)
             await uow_session.todo.delete_by_author_id(user_id)
-            await uow_session.token.delete_all_user_tokens(user_id)
+            await uow_session.token.delete_by_user_id(user_id)
             await uow_session.auth.delete_by_id(user_id)
 
             return {

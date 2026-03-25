@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 600px;">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="h4 mb-0">Управление тегами</h2>
+            <span class="badge bg-secondary">{{ tags|length }}</span>
+        </div>
+        <div class="card-body">
+            <div id="actionMessage" class="alert d-none mb-3" role="alert"></div>
+
+            <!-- Форма создания тега -->
+            <div class="position-relative mb-4">
+                <label class="form-label fw-semibold">Новый тег</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="newTagInput"
+                           placeholder="Введите название тега..." autocomplete="off" maxlength="50">
+                    <button class="btn btn-primary" type="button" id="createTagBtn">Создать</button>
+                </div>
+                <div id="tagDropdown" class="tag-dropdown d-none"></div>
+                <div class="form-text text-muted">Начните вводить — система подскажет похожие теги, чтобы избежать дублей.</div>
+            </div>
+
+            <!-- Список тегов -->
+            <ul class="list-group" id="tagList">
+                {% for tag in tags %}
+                <li class="list-group-item d-flex justify-content-between align-items-center" data-tag="{{ tag }}">
+                    <span>{{ tag }}</span>
+                    <button class="btn btn-sm btn-outline-danger delete-tag-btn" data-tag="{{ tag }}">Удалить</button>
+                </li>
+                {% endfor %}
+                {% if not tags %}
+                <li class="list-group-item text-muted" id="emptyMsg">Тегов пока нет.</li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<style>
+    .tag-dropdown {
+        position: absolute;
+        left: 0;
+        right: 80px; /* leave space for button */
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        z-index: 100;
+        max-height: 200px;
+        overflow-y: auto;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .tag-option { padding: 8px 14px; cursor: pointer; font-size: 14px; }
+    .tag-option:hover, .tag-option.active { background: #f0f4ff; }
+    .tag-option.is-duplicate { color: #dc3545; font-weight: 500; }
+</style>
+
+<script>
+    const newTagInput = document.getElementById('newTagInput');
+    const tagDropdown = document.getElementById('tagDropdown');
+    const createTagBtn = document.getElementById('createTagBtn');
+    const tagList = document.getElementById('tagList');
+    let activeIndex = -1;
+
+    function showMessage(text, type = 'success') {
+        const el = document.getElementById('actionMessage');
+        el.textContent = text;
+        el.className = `alert alert-${type} mb-3`;
+        el.classList.remove('d-none');
+        setTimeout(() => el.classList.add('d-none'), 4000);
+    }
+
+    async function fetchSuggestions(q) {
+        const res = await fetchWithAuth(`/todo/api/tags/suggest/?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        return data.suggestions || [];
+    }
+
+    function renderDropdown(suggestions, query) {
+        activeIndex = -1;
+        tagDropdown.innerHTML = '';
+        const trimmed = query.trim().toLowerCase();
+        suggestions.forEach(name => {
+            const div = document.createElement('div');
+            div.className = 'tag-option';
+            const isDup = name.toLowerCase() === trimmed || levenshtein(name.toLowerCase(), trimmed) <= 1;
+            if (isDup && trimmed) div.classList.add('is-duplicate');
+            div.textContent = isDup && trimmed ? `⚠ ${name} (похоже на ваш ввод)` : name;
+            div.addEventListener('mousedown', () => {
+                newTagInput.value = name;
+                tagDropdown.classList.add('d-none');
+            });
+            tagDropdown.appendChild(div);
+        });
+        tagDropdown.classList.toggle('d-none', tagDropdown.children.length === 0);
+    }
+
+    // Simple Levenshtein distance for warning about duplicates
+    function levenshtein(a, b) {
+        const m = a.length, n = b.length;
+        const dp = Array.from({length: m + 1}, (_, i) => Array.from({length: n + 1}, (_, j) => i === 0 ? j : j === 0 ? i : 0));
+        for (let i = 1; i <= m; i++)
+            for (let j = 1; j <= n; j++)
+                dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+        return dp[m][n];
+    }
+
+    let debounceTimer;
+    newTagInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+            renderDropdown(await fetchSuggestions(newTagInput.value), newTagInput.value);
+        }, 200);
+    });
+    newTagInput.addEventListener('focus', async () => {
+        renderDropdown(await fetchSuggestions(newTagInput.value), newTagInput.value);
+    });
+    newTagInput.addEventListener('blur', () => setTimeout(() => tagDropdown.classList.add('d-none'), 150));
+    newTagInput.addEventListener('keydown', (e) => {
+        const items = tagDropdown.querySelectorAll('.tag-option');
+        if (e.key === 'ArrowDown') { e.preventDefault(); activeIndex = Math.min(activeIndex + 1, items.length - 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); activeIndex = Math.max(activeIndex - 1, -1); }
+        else if (e.key === 'Enter') { e.preventDefault(); if (activeIndex >= 0) items[activeIndex].dispatchEvent(new MouseEvent('mousedown')); else createTagBtn.click(); }
+        else if (e.key === 'Escape') { tagDropdown.classList.add('d-none'); return; }
+        items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+    });
+
+    createTagBtn.addEventListener('click', async () => {
+        const name = newTagInput.value.trim();
+        if (!name) { showMessage('Введите название тега.', 'warning'); return; }
+
+        const fd = new FormData();
+        fd.append('name', name);
+        const res = await fetchWithAuth('/todo/api/tags/', {method: 'POST', body: fd});
+        const data = await res.json();
+
+        if (!res.ok) {
+            showMessage(data.error || 'Ошибка создания тега.', 'danger');
+            return;
+        }
+
+        showMessage(`Тег «${name}» создан.`, 'success');
+        newTagInput.value = '';
+
+        // Add to list
+        const emptyMsg = document.getElementById('emptyMsg');
+        if (emptyMsg) emptyMsg.remove();
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+        li.dataset.tag = name;
+        li.innerHTML = `<span>${name}</span><button class="btn btn-sm btn-outline-danger delete-tag-btn" data-tag="${name}">Удалить</button>`;
+        tagList.appendChild(li);
+        bindDeleteBtn(li.querySelector('.delete-tag-btn'));
+    });
+
+    function bindDeleteBtn(btn) {
+        btn.addEventListener('click', async () => {
+            const tag = btn.dataset.tag;
+            const res = await fetchWithAuth(`/todo/api/tags/${encodeURIComponent(tag)}/`, {method: 'DELETE'});
+            const data = await res.json();
+            if (!res.ok) { showMessage(data.error || 'Ошибка удаления.', 'danger'); return; }
+            showMessage(`Тег «${tag}» удалён.`, 'success');
+            btn.closest('li').remove();
+            if (tagList.children.length === 0) {
+                tagList.innerHTML = '<li class="list-group-item text-muted" id="emptyMsg">Тегов пока нет.</li>';
+            }
+        });
+    }
+
+    document.querySelectorAll('.delete-tag-btn').forEach(bindDeleteBtn);
+</script>
+{% endblock %}

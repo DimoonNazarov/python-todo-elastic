@@ -2,7 +2,6 @@
 
 {% block content %}
 
-
 <form id="todoForm" class="d-flex flex-column gap-2">
     <div class="form-floating">
         <input minlength="3" maxlength="200" type="text" class="form-control" id="title" name="title"
@@ -15,15 +14,26 @@
         <label for="details">Введите описание задач</label>
     </div>
 
-    <div class="form-floating">
-        <select class="form-select" name="tag" id="tag">
-            <option>Тип задачи:</option>
-            <option value="Учёба">Учёба</option>
-            <option value="Личное">Личное</option>
-            <option selected value="Планы">Планы</option>
-        </select>
-        <label for="tag">Тип задачи:</label>
+    <div class="position-relative">
+        <label class="form-label text-muted small mb-1">Тег</label>
+        <input type="text" class="form-control" id="tagInput" name="tag"
+               placeholder="Введите или выберите тег..." autocomplete="off">
+        <div id="tagDropdown" class="tag-dropdown d-none"></div>
     </div>
+
+    <div>
+        <label class="form-label text-muted small mb-1">Срок выполнения</label>
+        <div class="row g-2">
+            <div class="col-7">
+                <input type="date" class="form-control" id="due_date" name="due_date">
+            </div>
+            <div class="col-5">
+                <input type="time" class="form-control" id="due_time" name="due_time" value="09:00">
+            </div>
+        </div>
+        <div id="due_day_label" class="text-muted small mt-1"></div>
+    </div>
+
     <div class="form-group">
         <label for="image">Выберите изображение:</label>
         <input type="file" class="form-control" id="image" name="image" accept="image/*">
@@ -32,37 +42,170 @@
     <button type="submit" class="btn btn-success">Добавить</button>
 </form>
 
+<style>
+    .tag-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        z-index: 100;
+        max-height: 220px;
+        overflow-y: auto;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .tag-option {
+        padding: 8px 14px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    .tag-option:hover, .tag-option.active {
+        background: #f0f4ff;
+    }
+    .tag-option.create-new {
+        color: #0d6efd;
+        font-style: italic;
+        border-top: 1px solid #dee2e6;
+    }
+</style>
+
 <script>
+    const DAYS_RU = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"];
+
+    // ── Tag autocomplete ──────────────────────────────────────
+    const tagInput = document.getElementById('tagInput');
+    const tagDropdown = document.getElementById('tagDropdown');
+    let activeIndex = -1;
+    let currentSuggestions = [];
+
+    async function fetchSuggestions(q) {
+        const res = await fetchWithAuth(`/todo/api/tags/suggest/?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        return data.suggestions || [];
+    }
+
+    function renderDropdown(suggestions, query) {
+        currentSuggestions = suggestions;
+        activeIndex = -1;
+        tagDropdown.innerHTML = '';
+
+        suggestions.forEach((name, i) => {
+            const div = document.createElement('div');
+            div.className = 'tag-option';
+            div.textContent = name;
+            div.addEventListener('mousedown', () => selectTag(name));
+            tagDropdown.appendChild(div);
+        });
+
+        const trimmed = query.trim();
+        const exactExists = suggestions.some(s => s.toLowerCase() === trimmed.toLowerCase());
+        if (trimmed && !exactExists) {
+            const div = document.createElement('div');
+            div.className = 'tag-option create-new';
+            div.textContent = `+ Создать тег «${trimmed}»`;
+            div.addEventListener('mousedown', () => createAndSelectTag(trimmed));
+            tagDropdown.appendChild(div);
+        }
+
+        tagDropdown.classList.toggle('d-none', tagDropdown.children.length === 0);
+    }
+
+    function selectTag(name) {
+        tagInput.value = name;
+        tagDropdown.classList.add('d-none');
+    }
+
+    async function createAndSelectTag(name) {
+        const formData = new FormData();
+        formData.append('name', name);
+        await fetchWithAuth('/todo/api/tags/', {method: 'POST', body: formData});
+        selectTag(name);
+    }
+
+    let debounceTimer = null;
+    tagInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+            const q = tagInput.value;
+            const suggestions = await fetchSuggestions(q);
+            renderDropdown(suggestions, q);
+        }, 200);
+    });
+
+    tagInput.addEventListener('focus', async () => {
+        const suggestions = await fetchSuggestions(tagInput.value);
+        renderDropdown(suggestions, tagInput.value);
+    });
+
+    tagInput.addEventListener('blur', () => {
+        setTimeout(() => tagDropdown.classList.add('d-none'), 150);
+    });
+
+    tagInput.addEventListener('keydown', (e) => {
+        const items = tagDropdown.querySelectorAll('.tag-option');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIndex = Math.min(activeIndex + 1, items.length - 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIndex = Math.max(activeIndex - 1, -1);
+        } else if (e.key === 'Enter' && activeIndex >= 0) {
+            e.preventDefault();
+            items[activeIndex].dispatchEvent(new MouseEvent('mousedown'));
+            return;
+        } else if (e.key === 'Escape') {
+            tagDropdown.classList.add('d-none');
+            return;
+        }
+        items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+        if (activeIndex >= 0) items[activeIndex].scrollIntoView({block: 'nearest'});
+    });
+
+    // ── Due date ─────────────────────────────────────────────
+    function updateDayLabel() {
+        const dateVal = document.getElementById('due_date').value;
+        const label = document.getElementById('due_day_label');
+        if (dateVal) {
+            const d = new Date(dateVal + 'T00:00:00');
+            label.textContent = DAYS_RU[d.getDay()];
+        } else {
+            label.textContent = '';
+        }
+    }
+    document.getElementById('due_date').addEventListener('change', updateDayLabel);
+
+    // ── Form submit ──────────────────────────────────────────
     document.getElementById('todoForm').addEventListener('submit', function (e) {
-    e.preventDefault();
+        e.preventDefault();
 
         const formData = new FormData(this);
-        formData.append('source', 'Созданная')
+        formData.append('source', 'Созданная');
 
-        fetchWithAuth('/todo/add/', {
-            method: 'POST',
-            body: formData
-        })
-                .then(res => {
-                    console.log(res.status)
+        const dateVal = document.getElementById('due_date').value;
+        const timeVal = document.getElementById('due_time').value;
+        formData.delete('due_date');
+        formData.delete('due_time');
+        if (dateVal) {
+            const time = timeVal || '00:00';
+            formData.append('due_at', `${dateVal}T${time}:00`);
+        }
 
-                    if (res.status == 401) {
-                        window.location.href = '/todo/401/';
-                        return
-                    }
-                    return res.json()
-                })
-                .then(data => {
-                    if (data == null){
-                        window.location.href = '/todo/401/';
-                    } else {
-                        console.log('Успешно:', data);
-                        window.location.href = '/todo/home/';
-                    }
-                })
-                .catch(error => console.error('Ошибка:', error));
+        fetchWithAuth('/todo/add/', {method: 'POST', body: formData})
+            .then(res => {
+                if (res.status === 401) { window.location.href = '/todo/401/'; return; }
+                return res.json();
+            })
+            .then(data => {
+                if (!data) { window.location.href = '/todo/401/'; return; }
+                window.location.href = '/todo/list/';
+            })
+            .catch(error => console.error('Ошибка:', error));
 
         this.reset();
+        document.getElementById('due_day_label').textContent = '';
     });
 </script>
 

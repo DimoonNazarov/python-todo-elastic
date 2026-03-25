@@ -9,18 +9,28 @@
                     <h2 class="h4 mb-0">Активность пользователей</h2>
                 </div>
                 <div class="card-body">
-                    <div class="row mb-4">
+                    <div class="row mb-4 g-3">
                         <div class="col-md-4">
                             <label for="days" class="form-label">Период:</label>
-                            <div class="input-group">
-                                <select class="form-select" id="days" onchange="changeDays()">
-                                    <option value="7" {% if days == 7 %}selected{% endif %}>Последние 7 дней</option>
-                                    <option value="14" {% if days == 14 %}selected{% endif %}>Последние 14 дней</option>
-                                    <option value="30" {% if days == 30 %}selected{% endif %}>Последние 30 дней</option>
-                                    <option value="90" {% if days == 90 %}selected{% endif %}>Последние 90 дней</option>
-                                </select>
-                                <button class="btn btn-primary" onclick="refreshData()">Обновить</button>
-                            </div>
+                            <select class="form-select" id="days" onchange="updateChart()">
+                                <option value="7" {% if days == 7 %}selected{% endif %}>Последние 7 дней</option>
+                                <option value="14" {% if days == 14 %}selected{% endif %}>Последние 14 дней</option>
+                                <option value="30" {% if days == 30 %}selected{% endif %}>Последние 30 дней</option>
+                                <option value="90" {% if days == 90 %}selected{% endif %}>Последние 90 дней</option>
+                                <option value="180" {% if days == 180 %}selected{% endif %}>Последние 180 дней</option>
+                                <option value="365" {% if days == 365 %}selected{% endif %}>Последний год</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="interval" class="form-label">Группировка:</label>
+                            <select class="form-select" id="interval" onchange="updateChart()">
+                                <option value="day" {% if interval == "day" %}selected{% endif %}>По дням</option>
+                                <option value="week" {% if interval == "week" %}selected{% endif %}>По неделям</option>
+                                <option value="month" {% if interval == "month" %}selected{% endif %}>По месяцам</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button class="btn btn-primary w-100" onclick="updateChart()">Обновить</button>
                         </div>
                     </div>
 
@@ -41,7 +51,11 @@
                             <div class="col-md-4">
                                 <div class="card bg-light">
                                     <div class="card-body text-center">
-                                        <h3 class="h5 text-muted">Дней в периоде</h3>
+                                        <h3 class="h5 text-muted">
+                                            {% if interval == "week" %}Недель в периоде
+                                            {% elif interval == "month" %}Месяцев в периоде
+                                            {% else %}Дней в периоде{% endif %}
+                                        </h3>
                                         <p class="h2 mb-0 text-success">{{ dates|length }}</p>
                                     </div>
                                 </div>
@@ -50,9 +64,7 @@
                                 <div class="card bg-light">
                                     <div class="card-body text-center">
                                         <h3 class="h5 text-muted">Активных пользователей</h3>
-                                        <p class="h2 mb-0 text-info">
-                                            {{ users_count }}
-                                        </p>
+                                        <p class="h2 mb-0 text-info">{{ users_count }}</p>
                                     </div>
                                 </div>
                             </div>
@@ -68,14 +80,25 @@
     </div>
 </div>
 
-<!-- Добавляем Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
     {% if not error %}
-    // Данные из шаблона
     const dates = {{ dates|tojson }};
     const series = {{ series|tojson }};
+    const currentInterval = {{ interval|tojson }};
+
+    const INTERVAL_LABELS = {
+        'day': 'Число заметок в день от пользователя',
+        'week': 'Число заметок в неделю от пользователя',
+        'month': 'Число заметок в месяц от пользователя',
+    };
+
+    const INTERVAL_X_LABELS = {
+        'day': 'Дата',
+        'week': 'Неделя (начало)',
+        'month': 'Месяц',
+    };
 
     const palette = [
         'rgb(75, 192, 192)',
@@ -87,12 +110,11 @@
         'rgb(46, 204, 113)',
         'rgb(231, 76, 60)',
     ];
-    
-    // Создание графика при загрузке страницы
+
     document.addEventListener('DOMContentLoaded', function() {
         const ctx = document.getElementById('activityChart').getContext('2d');
         new Chart(ctx, {
-            type: 'line',
+            type: 'bar',
             data: {
                 labels: dates,
                 datasets: series.map((item, index) => {
@@ -100,10 +122,9 @@
                     return {
                         label: item.label,
                         data: item.data,
+                        backgroundColor: color.replace('rgb', 'rgba').replace(')', ', 0.7)'),
                         borderColor: color,
-                        backgroundColor: color.replace('rgb', 'rgba').replace(')', ', 0.16)'),
-                        tension: 0.2,
-                        fill: false
+                        borderWidth: 1,
                     };
                 })
             },
@@ -117,11 +138,23 @@
                     },
                     title: {
                         display: true,
-                        text: 'Число заметок в день от пользователя'
+                        text: INTERVAL_LABELS[currentInterval] || INTERVAL_LABELS['day']
                     }
                 },
                 scales: {
+                    x: {
+                        stacked: series.length > 1,
+                        title: {
+                            display: true,
+                            text: INTERVAL_X_LABELS[currentInterval] || INTERVAL_X_LABELS['day']
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    },
                     y: {
+                        stacked: series.length > 1,
                         beginAtZero: true,
                         title: {
                             display: true,
@@ -130,42 +163,17 @@
                         ticks: {
                             stepSize: 1
                         }
-                    },
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Дата'
-                        },
-                        ticks: {
-                            maxRotation: 45,
-                            minRotation: 45
-                        }
                     }
                 }
             }
         });
     });
     {% endif %}
-    
-    function changeDays() {
+
+    function updateChart() {
         const days = document.getElementById('days').value;
-        window.location.href = `/todo/notes-per-day/?days=${days}`;
-    }
-    
-    function refreshData() {
-        changeDays();
-    }
-    
-    // Функция для получения данных в формате JSON (опционально)
-    async function fetchData(days) {
-        try {
-            const response = await fetch(`/todo/api/notes-per-day/?days=${days}`);
-            const data = await response.json();
-            console.log('API Data:', data);
-            return data;
-        } catch (error) {
-            console.error('Error fetching data:', error);
-        }
+        const interval = document.getElementById('interval').value;
+        window.location.href = `/todo/notes-per-day/?days=${days}&interval=${interval}`;
     }
 </script>
 
@@ -174,20 +182,20 @@
         margin-top: 20px;
         margin-bottom: 20px;
     }
-    
+
     .card {
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    
+
     .card-header {
         background-color: #f8f9fa;
         border-bottom: 1px solid #dee2e6;
     }
-    
+
     .bg-light {
         background-color: #f8f9fa !important;
     }
-    
+
     .h2 {
         font-size: 2rem;
         font-weight: 600;

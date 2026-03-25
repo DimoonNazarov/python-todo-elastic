@@ -137,6 +137,7 @@ class TodoService:
         source: TodoSource,
         image: UploadFile | None,
         author_id: int,
+        due_at: datetime | None = None,
     ) -> None:
 
         async with uow_session.start():
@@ -163,6 +164,7 @@ class TodoService:
                 tag=tag,
                 source=source,
                 created_at=datetime.now(UTC),
+                due_at=due_at,
                 image_path=image_path,
                 image_hash=image_hash,
                 completed=False,
@@ -183,7 +185,7 @@ class TodoService:
          skip: int,
          created_from: str | None,
          created_to: str | None,
-         tag: Tags | None,
+         tag: str | None,
          query: str | None,
          search_tag: str | None,
          search_date_from: str | None,
@@ -194,7 +196,7 @@ class TodoService:
             logger.debug("Поиск по запросу: %s", query)
             hits = await uow_session.elastic.search_todos(
                 query_text=query,
-                tag=tag.value if tag else None,
+                tag=tag,
                 limit=limit,
                 skip=skip,
                 author_id=author_id,
@@ -269,7 +271,7 @@ class TodoService:
         skip: int,
         created_from: str | None,
         created_to: str | None,
-        tag: Tags | None,
+        tag: str | None,
     ) -> tuple[Sequence[TodoORM], int, int]:
         created_from = self._parse_data(created_from)
         created_to = self._parse_data(created_to)

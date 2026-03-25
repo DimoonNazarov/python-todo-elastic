@@ -456,20 +456,28 @@ class ElasticRepository:
             logger.error("Failed to get top words: %s", e)
             return []
 
+    _INTERVAL_FORMATS = {
+        "day": "yyyy-MM-dd",
+        "week": "yyyy-MM-dd",
+        "month": "yyyy-MM",
+    }
+
     async def get_notes_per_day(
         self,
         days: int = 30,
         author_id: int | None = None,
+        interval: str = "day",
     ) -> list[dict]:
         """
-        Возвращает количество заметок по дням
+        Возвращает количество заметок по дням/неделям/месяцам.
         :param days: количество дней для анализа
+        :param interval: календарный интервал ('day', 'week', 'month')
         """
         try:
-            # Вычисляем дату "от" (текущая дата минус указанное количество дней)
             from datetime import datetime, timedelta
 
             date_from = (datetime.now() - timedelta(days=days)).isoformat()
+            date_format = self._INTERVAL_FORMATS.get(interval, "yyyy-MM-dd")
 
             query_filters = [{"range": {"created_at": {"gte": date_from}}}]
             if author_id is not None:
@@ -481,12 +489,12 @@ class ElasticRepository:
                     "size": 0,
                     "query": {"bool": {"filter": query_filters}},
                     "aggs": {
-                        "notes_per_day": {
+                        "notes_per_period": {
                             "date_histogram": {
                                 "field": "created_at",
-                                "calendar_interval": "day",
-                                "format": "yyyy-MM-dd",
-                                "min_doc_count": 0,  # показывать даже дни с 0 заметок
+                                "calendar_interval": interval,
+                                "format": date_format,
+                                "min_doc_count": 0,
                             }
                         }
                     },
@@ -496,7 +504,7 @@ class ElasticRepository:
 
             result = []
             if "aggregations" in response:
-                for bucket in response["aggregations"]["notes_per_day"]["buckets"]:
+                for bucket in response["aggregations"]["notes_per_period"]["buckets"]:
                     result.append(
                         {"date": bucket["key_as_string"], "count": bucket["doc_count"]}
                     )
@@ -504,21 +512,24 @@ class ElasticRepository:
             return result
 
         except Exception as e:
-            logger.error("Failed to get notes per day: %s", e)
+            logger.error("Failed to get notes per period: %s", e)
             return []
 
     async def get_notes_per_day_by_user(
         self,
         days: int = 30,
         author_id: int | None = None,
+        interval: str = "day",
     ) -> list[dict]:
         """
-        Возвращает количество заметок по дням в разрезе пользователей.
+        Возвращает количество заметок по дням/неделям/месяцам в разрезе пользователей.
+        :param interval: календарный интервал ('day', 'week', 'month')
         """
         try:
             from datetime import datetime, timedelta
 
             date_from = (datetime.now() - timedelta(days=days)).date().isoformat()
+            date_format = self._INTERVAL_FORMATS.get(interval, "yyyy-MM-dd")
 
             query_filters = [{"range": {"created_at": {"gte": date_from}}}]
             if author_id is not None:
@@ -530,11 +541,11 @@ class ElasticRepository:
                     "size": 0,
                     "query": {"bool": {"filter": query_filters}},
                     "aggs": {
-                        "notes_per_day": {
+                        "notes_per_period": {
                             "date_histogram": {
                                 "field": "created_at",
-                                "calendar_interval": "day",
-                                "format": "yyyy-MM-dd",
+                                "calendar_interval": interval,
+                                "format": date_format,
                                 "min_doc_count": 0,
                             },
                             "aggs": {
@@ -552,7 +563,7 @@ class ElasticRepository:
 
             result = []
             if "aggregations" in response:
-                for bucket in response["aggregations"]["notes_per_day"]["buckets"]:
+                for bucket in response["aggregations"]["notes_per_period"]["buckets"]:
                     result.append(
                         {
                             "date": bucket["key_as_string"],
@@ -569,5 +580,128 @@ class ElasticRepository:
 
             return result
         except Exception as e:
-            logger.error("Failed to get notes per day by user: %s", e)
+            logger.error("Failed to get notes per period by user: %s", e)
+            return []
+
+    # ── Tags index ──────────────────────────────────────────────
+
+    TAGS_INDEX = "todo_tags"
+
+    async def _ensure_tags_index(self):
+        """Создаёт индекс тегов с маппингом, если он ещё не существует."""
+        exists = await self._client.indices.exists(index=self.TAGS_INDEX)
+        if not exists:
+            mapping = {
+                "mappings": {
+                    "properties": {
+                        "name": {
+                            "type": "keyword",
+                            "fields": {
+                                "suggest": {
+                                    "type": "search_as_you_type",
+                                    "analyzer": "standard"
+                                }
+                            }
+                        },
+                        "created_at": {"type": "date"}
+                    }
+                }
+            }
+            await self._client.indices.create(index=self.TAGS_INDEX, body=mapping)
+            logger.info("Tags index created.")
+            from datetime import datetime as _dt
+            for name in ["Учёба", "Личное", "Планы"]:
+                await self._client.index(
+                    index=self.TAGS_INDEX,
+                    id=name.lower(),
+                    document={"name": name, "created_at": _dt.now().isoformat()},
+                )
+            # Принудительный refresh чтобы теги сразу были видны в поиске
+            await self._client.indices.refresh(index=self.TAGS_INDEX)
+
+    async def get_all_tags(self) -> list[str]:
+        """Возвращает все теги по алфавиту."""
+        try:
+            await self._ensure_tags_index()
+            response = await self._client.search(
+                index=self.TAGS_INDEX,
+                body={"size": 200, "query": {"match_all": {}}, "sort": [{"name": "asc"}]},
+            )
+            return [hit["_source"]["name"] for hit in response["hits"]["hits"]]
+        except Exception as e:
+            logger.error("Failed to get tags: %s", e)
+            return []
+
+    async def create_tag(self, name: str) -> bool:
+        """Создаёт тег. Возвращает False если тег уже существует."""
+        try:
+            await self._ensure_tags_index()
+            name = name.strip()
+            doc_id = name.lower()
+            exists = await self._client.exists(index=self.TAGS_INDEX, id=doc_id)
+            if exists:
+                return False
+            from datetime import datetime as _dt
+            await self._client.index(
+                index=self.TAGS_INDEX,
+                id=doc_id,
+                document={"name": name, "created_at": _dt.now().isoformat()},
+            )
+            await self._client.indices.refresh(index=self.TAGS_INDEX)
+            return True
+        except Exception as e:
+            logger.error("Failed to create tag '%s': %s", name, e)
+            return False
+
+    async def delete_tag(self, name: str) -> bool:
+        """Удаляет тег. Возвращает False если тег не найден."""
+        try:
+            await self._ensure_tags_index()
+            await self._client.delete(index=self.TAGS_INDEX, id=name.lower().strip())
+            return True
+        except NotFoundError:
+            return False
+        except Exception as e:
+            logger.error("Failed to delete tag '%s': %s", name, e)
+            return False
+
+    async def suggest_tags(self, query: str, limit: int = 10) -> list[str]:
+        """Автодополнение тегов по запросу (prefix + fuzzy)."""
+        try:
+            await self._ensure_tags_index()
+            response = await self._client.search(
+                index=self.TAGS_INDEX,
+                body={
+                    "size": limit,
+                    "query": {
+                        "bool": {
+                            "should": [
+                                {
+                                    "multi_match": {
+                                        "query": query,
+                                        "type": "bool_prefix",
+                                        "fields": [
+                                            "name.suggest",
+                                            "name.suggest._2gram",
+                                            "name.suggest._3gram",
+                                        ],
+                                        "boost": 2,
+                                    }
+                                },
+                                {
+                                    "match": {
+                                        "name.suggest": {
+                                            "query": query,
+                                            "fuzziness": "AUTO",
+                                        }
+                                    }
+                                },
+                            ]
+                        }
+                    },
+                },
+            )
+            return [hit["_source"]["name"] for hit in response["hits"]["hits"]]
+        except Exception as e:
+            logger.error("Failed to suggest tags for '%s': %s", query, e)
             return []
