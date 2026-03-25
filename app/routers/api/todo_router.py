@@ -37,17 +37,31 @@ templates = Jinja2Templates(directory="app/templates")
 
 logger = logging.getLogger(__name__)
 
-DAYS_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+DAYS_RU = [
+    "Понедельник",
+    "Вторник",
+    "Среда",
+    "Четверг",
+    "Пятница",
+    "Суббота",
+    "Воскресенье",
+]
+VALID_INTERVALS = {"day", "week", "month"}
 
 
 def _group_todos_by_due_date(todos: list) -> list[dict]:
     """Группирует задачи по дате срока выполнения (due_at)."""
     from collections import defaultdict
+
     groups: dict = defaultdict(list)
     no_due = []
 
     for todo in todos:
-        due_at = getattr(todo, "due_at", None) if not isinstance(todo, dict) else todo.get("due_at")
+        due_at = (
+            getattr(todo, "due_at", None)
+            if not isinstance(todo, dict)
+            else todo.get("due_at")
+        )
         if due_at:
             date_key = due_at.date() if hasattr(due_at, "date") else due_at
             groups[date_key].append(todo)
@@ -191,139 +205,76 @@ async def search_by_top_words(
         return JSONResponse({"words": []})
 
 
-VALID_INTERVALS = {"day", "week", "month"}
-
-
 @todo_router.get("/notes-per-day/", response_class=HTMLResponse)
 async def notes_per_day_chart(
     request: Request,
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
+    todo_service: Annotated[TodoService, Depends(get_todo_service)],
     days: int = 30,
     interval: str = "day",
 ):
     """Страница с графиком активности пользователей"""
     if interval not in VALID_INTERVALS:
         interval = "day"
-    try:
-        author_id = current_user.id if current_user.role == UserRole.VIEWER else None
-        data = await uow_session.elastic.get_notes_per_day_by_user(
-            days,
-            author_id=author_id,
-            interval=interval,
-        )
-        dates = [item["date"] for item in data]
-
-        user_ids = sorted(
-            {
-                user_bucket["author_id"]
-                for item in data
-                for user_bucket in item["users"]
-            }
-        )
-
-        async with uow_session.start():
-            users = await uow_session.auth.get_users_by_ids(user_ids)
-
-        users_by_id = {user.id: user for user in users}
-        series = []
-        for user_id in user_ids:
-            user = users_by_id.get(user_id)
-            label = user.email if user else f"Пользователь #{user_id}"
-            counts = []
-            for item in data:
-                users_count_map = {
-                    bucket["author_id"]: bucket["count"] for bucket in item["users"]
-                }
-                counts.append(users_count_map.get(user_id, 0))
-            series.append({"label": label, "data": counts})
-
-        return templates.TemplateResponse(
-            "notes_per_day.html",
-            {
-                "request": request,
-                "dates": dates,
-                "series": series,
-                "days": days,
-                "interval": interval,
-                "total": sum(item["total"] for item in data),
-                "users_count": len(series),
-            },
-        )
-    except Exception as e:
-        logger.error("Notes per day error: %s", e)
-        return templates.TemplateResponse(
-            "notes_per_day.html",
-            {
-                "request": request,
-                "dates": [],
-                "series": [],
-                "days": days,
-                "interval": interval,
-                "total": 0,
-                "users_count": 0,
-                "error": str(e),
-            },
-        )
+    result = await todo_service.get_notes_per_day(
+        uow_session=uow_session,
+        current_user=current_user,
+        days=days,
+        interval=interval,
+    )
+    return templates.TemplateResponse(
+        "notes_per_day.html",
+        {"request": request, **result, "days": days, "interval": interval},
+    )
 
 
-@todo_router.get("/api/notes-per-day/")
+@todo_router.get("/api/notes-per-day/", response_class=JSONResponse)
 async def notes_per_day_api(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
+    todo_service: Annotated[TodoService, Depends(get_todo_service)],
     days: int = 30,
     interval: str = "day",
 ):
     """API endpoint для получения данных графика в JSON."""
     if interval not in VALID_INTERVALS:
         interval = "day"
-    try:
-        author_id = current_user.id if current_user.role == UserRole.VIEWER else None
-        data = await uow_session.elastic.get_notes_per_day_by_user(
-            days,
-            author_id=author_id,
-            interval=interval,
-        )
-        return JSONResponse(
-            {
-                "data": data,
-                "total": sum(item["total"] for item in data),
-                "days": days,
-                "interval": interval,
-            }
-        )
-    except Exception as e:
-        logger.error("Notes per day API error: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
+    result = await todo_service.get_notes_per_day(
+        uow_session=uow_session,
+        current_user=current_user,
+        days=days,
+        interval=interval,
+    )
+    return JSONResponse(result)
 
 
-@todo_router.get("/tags/", response_class=HTMLResponse)
+@todo_router.get(
+    "/tags/",
+    response_class=HTMLResponse,
+    dependencies=[Depends(get_current_active_user)],
+)
 async def tags_page(
     request: Request,
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
-    current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
 ):
     """Страница управления тегами."""
     tags = await uow_session.elastic.get_all_tags()
-    return templates.TemplateResponse(
-        "tags.html", {"request": request, "tags": tags}
-    )
+    return templates.TemplateResponse("tags.html", {"request": request, "tags": tags})
 
 
-@todo_router.get("/api/tags/")
+@todo_router.get("/api/tags/", dependencies=[Depends(get_current_active_user)])
 async def api_get_tags(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
-    current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
 ):
     """JSON: список всех тегов."""
     tags = await uow_session.elastic.get_all_tags()
     return JSONResponse({"tags": tags})
 
 
-@todo_router.get("/api/tags/suggest/")
+@todo_router.get("/api/tags/suggest/", dependencies=[Depends(get_current_active_user)])
 async def api_suggest_tags(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
-    current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
     q: str = "",
 ):
     """JSON: автодополнение тегов."""
@@ -334,26 +285,28 @@ async def api_suggest_tags(
     return JSONResponse({"suggestions": suggestions})
 
 
-@todo_router.post("/api/tags/")
+@todo_router.post("/api/tags/", dependencies=[Depends(get_current_active_user)])
 async def api_create_tag(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
-    current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
     name: str = Form(...),
 ):
     """JSON: создать тег."""
     name = name.strip()
     if not name:
-        return JSONResponse({"error": "Имя тега не может быть пустым."}, status_code=400)
+        return JSONResponse(
+            {"error": "Имя тега не может быть пустым."}, status_code=400
+        )
     created = await uow_session.elastic.create_tag(name)
     if not created:
         return JSONResponse({"error": f"Тег «{name}» уже существует."}, status_code=409)
     return JSONResponse({"name": name, "created": True})
 
 
-@todo_router.delete("/api/tags/{tag_name}/")
+@todo_router.delete(
+    "/api/tags/{tag_name}/", dependencies=[Depends(get_current_active_user)]
+)
 async def api_delete_tag(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
-    current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
     tag_name: str,
 ):
     """JSON: удалить тег."""

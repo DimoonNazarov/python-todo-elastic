@@ -3,6 +3,7 @@ import math
 import random
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import UploadFile
 
@@ -179,16 +180,16 @@ class TodoService:
 
     async def get_todos_page(
         self,
-         uow_session: UnitOfWork,
-         current_user: SUserInfo,
-         limit: int,
-         skip: int,
-         created_from: str | None,
-         created_to: str | None,
-         tag: str | None,
-         query: str | None,
-         search_tag: str | None,
-         search_date_from: str | None,
+        uow_session: UnitOfWork,
+        current_user: SUserInfo,
+        limit: int,
+        skip: int,
+        created_from: str | None,
+        created_to: str | None,
+        tag: str | None,
+        query: str | None,
+        search_tag: str | None,
+        search_date_from: str | None,
     ) -> dict:
         author_id = current_user.id if current_user.role == UserRole.VIEWER else None
 
@@ -275,7 +276,9 @@ class TodoService:
     ) -> tuple[Sequence[TodoORM], int, int]:
         created_from = self._parse_data(created_from)
         created_to = self._parse_data(created_to)
-        author_id = current_user.id if self._can_view_only_own_todos(current_user) else None
+        author_id = (
+            current_user.id if self._can_view_only_own_todos(current_user) else None
+        )
 
         async with uow_session.start():
 
@@ -476,7 +479,9 @@ class TodoService:
             todo = await uow_session.todo.get_todo_by_id(todo_id=todo_id)
             if not todo:
                 raise NotFoundException(f"Todo with id {todo_id} not found")
-            if todo.author_id != current_user.id and not self._can_delete_any_todo(current_user):
+            if todo.author_id != current_user.id and not self._can_delete_any_todo(
+                current_user
+            ):
                 raise ForbiddenException("Вы можете удалять только свои задачи")
 
             logger.info("Deleting todo: %s", todo)
@@ -608,3 +613,38 @@ class TodoService:
                 except Exception as e:
                     logger.error("Elastic delete failed: %s", e)
             return len(todo_ids)
+
+    async def get_notes_per_day(
+        self, uow_session: UnitOfWork, current_user: SUserInfo, days: int, interval: str
+    ) -> dict[str, Any]:
+        author_id = current_user.id if current_user.role == UserRole.VIEWER else None
+        data = await uow_session.elastic.get_notes_per_day_by_user(
+            days,
+            author_id=author_id,
+            interval=interval,
+        )
+        dates = [item["date"] for item in data]
+        user_ids = sorted(
+            {bucket["author_id"] for item in data for bucket in item["users"]}
+        )
+
+        async with uow_session.start():
+            users = await uow_session.auth.get_users_by_ids(user_ids)
+
+        users_by_id = {user.id: user for user in users}
+        series = []
+        for user_id in user_ids:
+            user = users_by_id.get(user_id)
+            label = user.email if user else f"Пользователь #{user_id}"
+            counts = []
+            for item in data:
+                count_map = {b["author_id"]: b["count"] for b in item["users"]}
+                counts.append(count_map.get(user_id, 0))
+            series.append({"label": label, "data": counts})
+
+        return {
+            "dates": dates,
+            "series": series,
+            "total": sum(item["total"] for item in data),
+            "users_count": len(series),
+        }

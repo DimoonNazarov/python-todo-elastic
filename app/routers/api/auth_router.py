@@ -125,8 +125,8 @@ async def register(
     user_data: SUserRegister,
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    current_user: Annotated[SUserInfo | None, Depends(get_optional_current_active_user)],
 ):
-    current_user = await get_optional_current_active_user(request, uow_session)
     await auth_service.register_user(
         uow_session=uow_session,
         user_data=user_data,
