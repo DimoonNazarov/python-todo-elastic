@@ -31,11 +31,8 @@
             </div>
         </form>
 
-        <div class="d-flex flex-wrap gap-2 mb-3">
-            <a href="/todo/list/?search_tag=Планы" class="btn btn-sm btn-outline-primary">Планы</a>
-            <a href="/todo/list/?search_tag=Учёба" class="btn btn-sm btn-outline-success">Учёба</a>
-            <a href="/todo/list/?search_tag=Личное" class="btn btn-sm btn-outline-warning">Личное</a>
-            <a href="/todo/list/" class="btn btn-sm btn-outline-secondary">Обычный список</a>
+        <div class="d-flex flex-wrap gap-2 mb-3" id="tagFilterButtons">
+            <a href="/todo/list/" class="btn btn-sm btn-outline-secondary">Все задачи</a>
         </div>
 
         <form action="/todo/list/" method="get" class="mb-3">
@@ -101,11 +98,8 @@
 
                     <div class="mb-3">
                         <span class="form-label">Тег</span>
-                        <select class="form-select form-select-sm" name="tag">
+                        <select class="form-select form-select-sm" name="tag" id="filterTagSelect">
                             <option value="" selected>Любой</option>
-                            <option value="Учёба">Учёба</option>
-                            <option value="Личное">Личное</option>
-                            <option value="Планы">Планы</option>
                         </select>
                     </div>
 
@@ -197,65 +191,101 @@
     restoreFilters();
 </script>
 
-<ul class="list-group">
-    {% for todo in todos %}
-    <li class="list-group-item">
-        <div class="d-flex align-items-start gap-3 flex-wrap flex-lg-nowrap">
-        {% if todo.image_path %}
-            <img src="{{ url_for('images', path=todo.image_path) }}" alt="todo" style="width: 50px; height: 50px;">
+{% macro todo_item(todo) %}
+<li class="list-group-item">
+    <div class="d-flex align-items-start gap-3 flex-wrap flex-lg-nowrap">
+    {% if todo.image_path %}
+        <img src="{{ url_for('images', path=todo.image_path) }}" alt="todo" style="width: 50px; height: 50px;">
+    {% endif %}
+
+    <div class="d-flex flex-column gap-2 flex-grow-1" style="min-width: 0;">
+        <div class="d-flex align-items-start gap-3">
+            <div class="flex-grow-1" style="min-width: 0;">
+        {% if todo.completed %}
+                <strike class="mb-0 d-block" style="white-space: normal; overflow-wrap: anywhere; word-break: break-word;">{{ todo.display_title or todo.title }}</strike>
+        {% else %}
+                <span class="mb-0 d-block" style="white-space: normal; overflow-wrap: anywhere; word-break: break-word;">{{ todo.display_title or todo.title }}</span>
         {% endif %}
-
-        <div class="d-flex flex-column gap-2 flex-grow-1" style="min-width: 0;">
-            <div class="d-flex align-items-start gap-3">
-                <div class="flex-grow-1" style="min-width: 0;">
-            {% if todo.completed %}
-                    <strike class="mb-0 d-block" style="white-space: normal; overflow-wrap: anywhere; word-break: break-word;">{{ todo.display_title or todo.title }}</strike>
-            {% else %}
-                    <span class="mb-0 d-block" style="white-space: normal; overflow-wrap: anywhere; word-break: break-word;">{{ todo.display_title or todo.title }}</span>
-            {% endif %}
-                </div>
-
-                <span class="text-muted small text-nowrap ms-auto flex-shrink-0">
+            </div>
+            <span class="text-muted small text-nowrap ms-auto flex-shrink-0">
                 {{ todo.author_email or 'Автор неизвестен' }}
             </span>
+        </div>
+
+        <div class="d-flex gap-3 align-items-center flex-wrap">
+            <div style="color: dodgerblue" class="small">{{ todo.source }}</div>
+            {% if todo.due_at %}
+            <div class="small text-secondary">
+                <span class="me-1">&#x1F551;</span>{{ todo.due_at.strftime('%H:%M') if todo.due_at.strftime else todo.due_at }}
             </div>
+            {% endif %}
+        </div>
+    </div>
 
-            <div style="color: dodgerblue" class="small flex-shrink-0">
-                {{ todo.source }}
-            </div>
-        </div>
+    <div class="d-flex align-items-center gap-3 ms-lg-auto flex-shrink-0">
+    <div class="form-check form-switch mb-0">
+        <label class="form-check-label" for="flexSwitchCheckChecked">Выполнено</label>
+        <input class="form-check-input completedTask" type="checkbox" id="flexSwitchCheckChecked"
+               data-todo-id="{{ todo.id }}" data-todo-title="{{ todo.title }}"
+               data-todo-details="{{ todo.details }}" data-todo-tag="{{ todo.tag }}" data-todo-date="{{ todo.created_at }}"
+               data-todo-image="{{ todo.image_path }}"
+               data-can-edit="{% if todo.author_id == current_user_id %}true{% else %}false{% endif %}"
+               {% if todo.completed %}checked{% endif %}>
+    </div>
 
-        <div class="d-flex align-items-center gap-3 ms-lg-auto flex-shrink-0">
-        <div class="form-check form-switch mb-0">
-            <label class="form-check-label" for="flexSwitchCheckChecked">Выполнено</label>
-            <input class="form-check-input completedTask" type="checkbox" id="flexSwitchCheckChecked"
-                   data-todo-id="{{ todo.id }}" data-todo-title="{{ todo.title }}"
-                   data-todo-details="{{ todo.details }}" data-todo-tag="{{ todo.tag }}" data-todo-date="{{ todo.created_at }}"
-                   data-todo-image="{{ todo.image_path }}"
-                   data-can-edit="{% if todo.author_id == current_user_id %}true{% else %}false{% endif %}"
-                   {% if todo.completed
-                   %}checked{% endif %}>
-        </div>
+    <div class="btn-group flex-shrink-0">
+        <a class="btn btn-success"
+           href="/todo/edit/{{ todo.id }}/?limit={{ limit }}&skip={{ page }}"
+           data-todo-id="{{ todo.id }}"
+           data-todo-title="{{ todo.title }}"
+           data-can-edit="{% if todo.author_id == current_user_id %}true{% else %}false{% endif %}">Редактировать</a>
+        <button class="btn btn-danger deleteButton" href="#"
+                data-todo-id="{{ todo.id }}"
+                data-todo-title="{{ todo.title }}"
+                data-can-delete="{% if current_user_role == 'admin' or todo.author_id == current_user_id %}true{% else %}false{% endif %}">Удалить</button>
+    </div>
+    </div>
+    </div>
+</li>
+{% endmacro %}
 
-        <div class="btn-group flex-shrink-0">
-            <a class="btn btn-success"
-               href="/todo/edit/{{ todo.id }}/?limit={{ limit }}&skip={{ page }}"
-               data-todo-id="{{ todo.id }}"
-               data-todo-title="{{ todo.title }}"
-               data-can-edit="{% if todo.author_id == current_user_id %}true{% else %}false{% endif %}">Редактировать</a>
-            <button class="btn btn-danger deleteButton" href="#"
-                    data-todo-id="{{ todo.id }}"
-                    data-todo-title="{{ todo.title }}"
-                    data-can-delete="{% if current_user_role == 'admin' or todo.author_id == current_user_id %}true{% else %}false{% endif %}">Удалить</button>
-        </div>
-        </div>
-        </div>
-    </li>
+{% if is_search_result %}
+<ul class="list-group">
+    {% for todo in todos %}
+        {{ todo_item(todo) }}
     {% endfor %}
 </ul>
-
 {% if not todos %}
 <div class="alert alert-info mt-3">Ничего не найдено.</div>
+{% endif %}
+
+{% else %}
+{# Группировка по дате срока выполнения #}
+{% if grouped_todos %}
+    {% for group in grouped_todos %}
+    <div class="mt-4">
+        <div class="d-flex align-items-center gap-2 mb-2">
+            {% if group.date %}
+            <span class="badge rounded-pill px-3 py-2 fs-6"
+                  style="background: {% if group.date.weekday() >= 5 %}#dc3545{% else %}#0d6efd{% endif %}; color: #fff;">
+                {{ group.label }}
+            </span>
+            <span class="text-muted small">{{ group.todos | length }} {{ "задача" if group.todos | length == 1 else "задач" }}</span>
+            {% else %}
+            <span class="badge rounded-pill px-3 py-2 fs-6 bg-secondary text-white">{{ group.label }}</span>
+            <span class="text-muted small">{{ group.todos | length }} {{ "задача" if group.todos | length == 1 else "задач" }}</span>
+            {% endif %}
+        </div>
+        <ul class="list-group">
+            {% for todo in group.todos %}
+                {{ todo_item(todo) }}
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+{% else %}
+<div class="alert alert-info mt-3">Ничего не найдено.</div>
+{% endif %}
 {% endif %}
 
 <div class="d-flex justify-content-between align-items-center">
@@ -593,6 +623,38 @@
             deleteOptions.classList.add('d-none');
             document.getElementById('rangeInputs').classList.add('d-none');
             document.getElementById('errorMsg').classList.add('d-none');
+        }
+    });
+
+    // ── Dynamic tag filter buttons ────────────────────────────
+    document.addEventListener('DOMContentLoaded', async function() {
+        try {
+            const res = await fetchWithAuth('/todo/api/tags/');
+            const data = await res.json();
+            const container = document.getElementById('tagFilterButtons');
+            const colors = ['primary', 'success', 'warning', 'info', 'danger', 'secondary'];
+            (data.tags || []).forEach((tag, i) => {
+                const a = document.createElement('a');
+                a.href = `/todo/list/?search_tag=${encodeURIComponent(tag)}`;
+                a.className = `btn btn-sm btn-outline-${colors[i % colors.length]}`;
+                a.textContent = tag;
+                container.appendChild(a);
+            });
+        } catch (e) {
+            console.error('Failed to load tags:', e);
+        }
+
+        // Populate tag filter select
+        const filterTagSelect = document.getElementById('filterTagSelect');
+        if (filterTagSelect) {
+            fetchWithAuth('/todo/api/tags/').then(r => r.json()).then(data => {
+                (data.tags || []).forEach(tag => {
+                    const opt = document.createElement('option');
+                    opt.value = tag;
+                    opt.textContent = tag;
+                    filterTagSelect.appendChild(opt);
+                });
+            });
         }
     });
 </script>

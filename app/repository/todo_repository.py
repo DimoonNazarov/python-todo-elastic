@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import Todo
-from app.schemas import Tags
 
 
 class TodoRepository:
@@ -16,7 +15,7 @@ class TodoRepository:
         self,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
-        tag: Tags | None = None,
+        tag: str | None = None,
         author_id: int | None = None,
     ) -> int:
         stmt = select(func.count()).select_from(Todo)
@@ -45,7 +44,7 @@ class TodoRepository:
         skip: int,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
-        tag: Tags = None,
+        tag: str | None = None,
         author_id: int | None = None,
     ) -> Sequence[Todo]:
 
