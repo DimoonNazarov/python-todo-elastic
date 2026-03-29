@@ -50,3 +50,7 @@ class LLMServiceException(AppException):
 
 class LLMRequestException(AppException):
     pass
+
+
+class InvalidTodoDataException(AppException):
+    pass

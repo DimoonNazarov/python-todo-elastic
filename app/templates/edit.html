@@ -15,7 +15,7 @@
         <button type="button" class="btn btn-outline-primary btn-sm" id="generateTitleBtn">Подобрать заголовок через OpenRouter</button>
     </div>
     <div>
-        <textarea class="form-control" maxlength="500" placeholder="Введите описание задачи" name="details" id="details"
+        <textarea class="form-control" maxlength="1000" placeholder="Введите описание задачи" name="details" id="details"
                   style="height: 100px"
                   data-original-value="{{ todo.details or '' }}"
                   data-masked-value="{{ todo.display_details or '' }}">{{ todo.display_details or '' }}</textarea>
@@ -185,7 +185,10 @@
     const titleInput = document.getElementById('title');
     const detailsInput = document.getElementById('details');
 
-    document.getElementById('todoForm').addEventListener('submit', function (e) {
+    const todoForm = document.getElementById('todoForm');
+    const saveButton = todoForm.querySelector('button[type="submit"]');
+
+    todoForm.addEventListener('submit', async function (e) {
         e.preventDefault();
 
         if (titleInput.dataset.maskedValue === titleInput.value) {
@@ -197,18 +200,36 @@
         }
 
         const formData = new FormData(this);
-        fetchWithAuth('/todo/edit/{{ todo.id }}/', {
-            method: 'PUT',
-            body: formData
-        })
-            .then(res => res.json())
-            .then(data => {
-                console.log('Успешно:', data);
-                window.location.href = '/todo/list/?limit={{ limit }}&skip={{ skip }}';
-            })
-            .catch(error => console.error('Ошибка:', error));
+        const initialSaveButtonText = saveButton.textContent;
+        saveButton.disabled = true;
+        saveButton.textContent = 'Сохраняем...';
 
-        this.reset();
+        try {
+            const response = await fetchWithAuth('/todo/edit/{{ todo.id }}/', {
+                method: 'PUT',
+                body: formData
+            });
+            const rawResponse = await response.text();
+            let data = {};
+            if (rawResponse) {
+                try {
+                    data = JSON.parse(rawResponse);
+                } catch {
+                    data = {detail: rawResponse};
+                }
+            }
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Не удалось сохранить изменения');
+            }
+
+            console.log('Успешно:', data);
+            window.location.href = '/todo/list/?limit={{ limit }}&skip={{ skip }}';
+        } catch (error) {
+            showLlmActionMessage(error.message || 'Не удалось сохранить изменения.', 'danger');
+            saveButton.disabled = false;
+            saveButton.textContent = initialSaveButtonText;
+        }
     });
 
     const generateSummaryButton = document.getElementById('generateSummaryButton');

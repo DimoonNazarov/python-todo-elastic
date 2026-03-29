@@ -119,10 +119,11 @@
 
     function clampDetailsValue() {
         if (detailsInput.value.length <= DETAILS_MAX_LENGTH) {
-            return;
+            return false;
         }
         detailsInput.value = detailsInput.value.slice(0, DETAILS_MAX_LENGTH);
         showDetailsLimitMessage();
+        return true;
     }
 
     // ── Tag autocomplete ──────────────────────────────────────
@@ -278,8 +279,13 @@
     });
 
     // ── Form submit ──────────────────────────────────────────
-    document.getElementById('todoForm').addEventListener('submit', function (e) {
+    const todoForm = document.getElementById('todoForm');
+    const submitButton = todoForm.querySelector('button[type="submit"]');
+
+    todoForm.addEventListener('submit', async function (e) {
         e.preventDefault();
+
+        clampDetailsValue();
 
         const formData = new FormData(this);
         formData.append('source', 'Созданная');
@@ -293,20 +299,40 @@
             formData.append('due_at', `${dateVal}T${time}:00`);
         }
 
-        fetchWithAuth('/todo/add/', {method: 'POST', body: formData})
-            .then(res => {
-                if (res.status === 401) { window.location.href = '/todo/401/'; return; }
-                return res.json();
-            })
-            .then(data => {
-                if (!data) { window.location.href = '/todo/401/'; return; }
-                window.location.href = '/todo/list/';
-            })
-            .catch(error => console.error('Ошибка:', error));
+        const initialSubmitButtonText = submitButton.textContent;
+        submitButton.disabled = true;
+        submitButton.textContent = 'Добавляем...';
 
-        this.reset();
-        document.getElementById('due_day_label').textContent = '';
-        detailsLimitMessage.classList.add('d-none');
+        try {
+            const response = await fetchWithAuth('/todo/add/', {method: 'POST', body: formData});
+            if (response.status === 401) {
+                window.location.href = '/todo/401/';
+                return;
+            }
+
+            const rawResponse = await response.text();
+            let data = {};
+            if (rawResponse) {
+                try {
+                    data = JSON.parse(rawResponse);
+                } catch {
+                    data = {detail: rawResponse};
+                }
+            }
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Не удалось добавить заметку.');
+            }
+
+            this.reset();
+            document.getElementById('due_day_label').textContent = '';
+            detailsLimitMessage.classList.add('d-none');
+            window.location.href = '/todo/list/';
+        } catch (error) {
+            showLlmActionMessage(error.message || 'Не удалось добавить заметку.', 'danger');
+            submitButton.disabled = false;
+            submitButton.textContent = initialSubmitButtonText;
+        }
     });
 </script>
 

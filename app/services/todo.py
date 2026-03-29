@@ -10,6 +10,7 @@ from fastapi import UploadFile
 from app.core import UnitOfWork
 from app.exceptions import (
     ForbiddenException,
+    InvalidTodoDataException,
     InvalidPageException,
     LLMRequestException,
     NotFoundException,
@@ -32,6 +33,7 @@ from app.utils import (
 )
 
 logger = logging.getLogger(__name__)
+TODO_DETAILS_MAX_LENGTH = 1000
 
 GENERATED_TITLES = [
     "Купить продукты",
@@ -103,10 +105,25 @@ class TodoService:
         return normalized or (fallback or "")
 
     @staticmethod
+    def _normalize_details(details: str | None) -> str | None:
+        if details is None:
+            return None
+        return details.replace("\r\n", "\n").replace("\r", "\n")
+
+    @staticmethod
     def _ensure_llm_source_text(details: str | None) -> str:
         if not details or not details.strip():
             raise LLMRequestException("Для выполнения операции нужно заполнить описание заметки.")
         return details.strip()
+
+    @staticmethod
+    def _validate_details(details: str | None) -> None:
+        if details is None:
+            return
+        if len(details) > TODO_DETAILS_MAX_LENGTH:
+            raise InvalidTodoDataException(
+                "Описание заметки не может превышать 1000 символов."
+            )
 
     @staticmethod
     def _build_cluster_context(cluster_todos_data: Sequence[TodoORM]) -> str:
@@ -235,6 +252,8 @@ class TodoService:
         author_id: int,
         due_at: datetime | None = None,
     ) -> None:
+        details = self._normalize_details(details)
+        self._validate_details(details)
 
         async with uow_session.start():
 
@@ -414,6 +433,8 @@ class TodoService:
         existing_image: str | None,
         image: UploadFile | None,
     ) -> TodoORM:
+        details = self._normalize_details(details)
+
         async with uow_session.start():
             todo = await uow_session.todo.get_todo_by_id(todo_id)
 
@@ -422,6 +443,9 @@ class TodoService:
 
             if todo.author_id != user.id:
                 raise ForbiddenException("Вы можете редактировать только свои задачи")
+
+            if details != todo.details:
+                self._validate_details(details)
 
             resolved_image_path, resolved_image_hash = await self._resolve_image(
                 uow_session, todo, image, existing_image, image_path

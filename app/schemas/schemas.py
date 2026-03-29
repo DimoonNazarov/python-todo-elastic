@@ -17,7 +17,7 @@ class Tags(str, Enum):
 class Todo(BaseModel):
     id: int | None = Field(default=None, alias="id")
     title: str = Field(min_length=3, max_length=200, default="Задача")
-    details: str = Field(max_length=500, default="Описание задачи")
+    details: str = Field(max_length=1000, default="Описание задачи")
     completed: bool = Field(default=False)
     tag: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)

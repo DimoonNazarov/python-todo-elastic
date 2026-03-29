@@ -7,6 +7,7 @@ from app.exceptions import (
     InvalidPageException,
     IncorrectEmailOrPasswordException,
     ForbiddenException,
+    InvalidTodoDataException,
     InvalidCredentials,
     InactiveUserException,
     LLMConfigurationException,
@@ -106,6 +107,14 @@ async def llm_service_handler(request: Request, exc: Exception) -> JSONResponse:
 
 async def llm_request_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, LLMRequestException)
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": str(exc)},
+    )
+
+
+async def invalid_todo_data_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, InvalidTodoDataException)
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={"detail": str(exc)},

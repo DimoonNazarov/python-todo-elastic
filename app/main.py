@@ -12,6 +12,7 @@ from app.exceptions import (
     InvalidPageException,
     IncorrectEmailOrPasswordException,
     ForbiddenException,
+    InvalidTodoDataException,
     InvalidCredentials,
     InactiveUserException,
     LLMConfigurationException,
@@ -29,6 +30,7 @@ from app.routers.exception_handlers import (
     inactive_user_handler,
     not_found_handler,
     invalid_page_handler,
+    invalid_todo_data_handler,
     llm_configuration_handler,
     llm_request_handler,
     llm_service_handler,
@@ -75,6 +77,7 @@ app.add_exception_handler(InvalidPageException, invalid_page_handler)
 app.add_exception_handler(IncorrectEmailOrPasswordException, incorrect_email_or_password_handler)
 app.add_exception_handler(InvalidCredentials, invalid_credentials_handler)
 app.add_exception_handler(ForbiddenException, forbidden_handler)
+app.add_exception_handler(InvalidTodoDataException, invalid_todo_data_handler)
 app.add_exception_handler(InactiveUserException, inactive_user_handler)
 app.add_exception_handler(LLMConfigurationException, llm_configuration_handler)
 app.add_exception_handler(LLMRequestException, llm_request_handler)
