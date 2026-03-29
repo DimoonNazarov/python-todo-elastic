@@ -84,7 +84,7 @@ def _set_auth_cookies(response: Response, tokens: Token) -> None:
 
 @auth_router.get("/login", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
 async def get_login(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    return templates.TemplateResponse(request, "login.html")
 
 
 @auth_router.post(
@@ -211,11 +211,17 @@ async def refresh_and_redirect(
 
     raw = request.cookies.get("refresh_token")
     if not raw:
-        raise InvalidCredentials("Refresh token missing")
+        response = RedirectResponse("/auth/login", status_code=302)
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token", path="/auth")
+        return response
 
     refresh_token = extract_bearer_token(raw)
     if not refresh_token:
-        raise InvalidCredentials("Invalid refresh token format")
+        response = RedirectResponse("/auth/login", status_code=302)
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token", path="/auth")
+        return response
 
     try:
         tokens = await auth_service.refresh_tokens(

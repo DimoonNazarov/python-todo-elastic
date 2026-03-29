@@ -250,8 +250,6 @@
                 body: JSON.stringify(formData)
             });
 
-<!--            const data = await response.json();-->
-
             if (response.ok) {
                 successContainer.style.display = 'block';
                 successContainer.innerHTML = 'Вход выполнен успешно! Перенаправляем...';
@@ -260,6 +258,7 @@
                     window.location.href = '/';
                 }, 1000);
             } else {
+                const data = await response.json();
                 errorContainer.style.display = 'block';
                 errorContainer.innerHTML = data.detail || 'Неверный email или пароль';
             }
