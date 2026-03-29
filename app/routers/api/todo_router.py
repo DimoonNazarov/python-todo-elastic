@@ -100,7 +100,6 @@ def _todos_page_context(
     grouped_todos = _group_todos_by_due_date(todos) if search_mode is None else None
 
     return {
-        "request": request,
         "todos": todos,
         "grouped_todos": grouped_todos,
         "page": skip,
@@ -119,7 +118,9 @@ def _todos_page_context(
     }
 
 
-@todo_router.get("/clusters/", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
+@todo_router.get(
+    "/clusters/", response_class=HTMLResponse, status_code=status.HTTP_200_OK
+)
 async def get_clusters(
     request: Request,
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
@@ -136,9 +137,9 @@ async def get_clusters(
     )
     total_todos = sum(len(c["todos"]) for c in clusters)
     return templates.TemplateResponse(
+        request,
         "clusters.html",
         {
-            "request": request,
             "clusters": clusters,
             "n_clusters": n_clusters,
             "total_todos": total_todos,
@@ -148,7 +149,9 @@ async def get_clusters(
     )
 
 
-@todo_router.get("/duplicates/", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
+@todo_router.get(
+    "/duplicates/", response_class=HTMLResponse, status_code=status.HTTP_200_OK
+)
 async def get_duplicates(
     request: Request,
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
@@ -162,9 +165,9 @@ async def get_duplicates(
     )
     total_duplicates = sum(len(g["todos"]) - 1 for g in groups)
     return templates.TemplateResponse(
+        request,
         "duplicates.html",
         {
-            "request": request,
             "groups": groups,
             "total_groups": len(groups),
             "total_duplicates": total_duplicates,
@@ -179,7 +182,7 @@ async def get_home(request: Request):
     """Main page with todo list"""
     logger.info("In home")
 
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @todo_router.get(
@@ -187,7 +190,7 @@ async def get_home(request: Request):
 )
 async def page_401(request: Request):
     """Main page with todo list"""
-    return templates.TemplateResponse("401.html", {"request": request})
+    return templates.TemplateResponse(request, "401.html")
 
 
 @todo_router.get(
@@ -196,7 +199,7 @@ async def page_401(request: Request):
 async def get_home(request: Request):
     """Main page with todo list"""
 
-    return templates.TemplateResponse("info-tasks.html", {"request": request})
+    return templates.TemplateResponse(request, "info-tasks.html")
 
 
 @todo_router.get("/list/", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
@@ -228,6 +231,7 @@ async def get_todos(
     )
 
     return templates.TemplateResponse(
+        request,
         "todos.html",
         _todos_page_context(
             request,
@@ -283,8 +287,9 @@ async def notes_per_day_chart(
         interval=interval,
     )
     return templates.TemplateResponse(
+        request,
         "notes_per_day.html",
-        {"request": request, **result, "days": days, "interval": interval},
+        {**result, "days": days, "interval": interval},
     )
 
 
@@ -319,7 +324,7 @@ async def tags_page(
 ):
     """Страница управления тегами."""
     tags = await uow_session.elastic.get_all_tags()
-    return templates.TemplateResponse("tags.html", {"request": request, "tags": tags})
+    return templates.TemplateResponse(request, "tags.html", {"tags": tags})
 
 
 @todo_router.get(
@@ -449,9 +454,9 @@ async def get_todo(
 
     tags = await uow_session.elastic.get_all_tags()
     return templates.TemplateResponse(
+        request,
         "edit.html",
         {
-            "request": request,
             "todo": todo,
             "tags": tags,
             "limit": limit,
@@ -573,9 +578,11 @@ async def visualize_todos(
     )
 
 
-@todo_router.get("/generate/", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
+@todo_router.get(
+    "/generate/", response_class=HTMLResponse, status_code=status.HTTP_200_OK
+)
 async def show_generate(request: Request):
-    return templates.TemplateResponse("generate.html", {"request": request})
+    return templates.TemplateResponse(request, "generate.html")
 
 
 @todo_router.post("/generate/", status_code=status.HTTP_201_CREATED)
@@ -610,7 +617,7 @@ async def generate_todos(
 )
 async def visualize_todos(request: Request):
     """Page export and import todos from excel file"""
-    return templates.TemplateResponse("export.html", {"request": request})
+    return templates.TemplateResponse(request, "export.html")
 
 
 @todo_router.post(
@@ -632,12 +639,10 @@ async def import_file(
     return RedirectResponse("/todo/home", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@todo_router.get("/import-log",response_class=HTMLResponse)
+@todo_router.get("/import-log", response_class=HTMLResponse)
 async def import_file(request: Request):
     files = os.listdir("./files/")
-    return templates.TemplateResponse(
-        "import-log.html", {"request": request, "files": files}
-    )
+    return templates.TemplateResponse(request, "import-log.html", {"files": files})
 
 
 @todo_router.get("/import-log/{filename}", response_class=FileResponse)

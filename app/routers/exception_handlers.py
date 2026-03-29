@@ -33,9 +33,9 @@ async def invalid_page_handler(request: Request, exc: Exception) -> JSONResponse
 async def user_already_exists_handler(request: Request, exc: Exception) -> HTMLResponse:
     assert isinstance(exc, UserAlreadyExists)
     return templates.TemplateResponse(
+        request,
         "register.html",
         {
-            "request": request,
             "error": "Username already registered",
             "can_choose_role": False,
             "default_role": UserRole.EDITOR.value,
@@ -70,8 +70,9 @@ async def incorrect_email_or_password_handler(
     """Глобальный обработчик для ошибок аутентификации - возвращает HTML"""
     assert isinstance(exc, IncorrectEmailOrPasswordException)
     return templates.TemplateResponse(
+        request,
         "login.html",
-        {"request": request, "error": "Incorrect username or password"},
+        {"error": "Incorrect username or password"},
         status_code=400,
     )
 
@@ -80,5 +81,5 @@ async def inactive_user_handler(request: Request, exc: Exception) -> HTMLRespons
     """Глобальный обработчик для неактивных пользователей - возвращает HTML"""
     assert isinstance(exc, InactiveUserException)
     return templates.TemplateResponse(
-        "login.html", {"request": request, "error": "Inactive user"}, status_code=403
+        request, "login.html", {"error": "Inactive user"}, status_code=403
     )

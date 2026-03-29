@@ -48,7 +48,6 @@ async def _build_register_context(
     default_role = UserRole.ADMIN.value if first_user else UserRole.EDITOR.value
 
     return {
-        "request": request,
         "can_choose_role": can_choose_role,
         "default_role": default_role,
         "first_user": first_user,
@@ -85,7 +84,7 @@ def _set_auth_cookies(response: Response, tokens: Token) -> None:
 
 @auth_router.get("/login", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
 async def get_login(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @auth_router.post(
@@ -127,10 +126,7 @@ async def get_register(
             url="/todo/home/", status_code=status.HTTP_303_SEE_OTHER
         )
 
-    return templates.TemplateResponse(
-        "register.html",
-        context,
-    )
+    return templates.TemplateResponse(request, "register.html", context)
 
 
 @auth_router.post("/register", response_class=HTMLResponse)
