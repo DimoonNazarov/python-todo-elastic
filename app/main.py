@@ -14,6 +14,9 @@ from app.exceptions import (
     ForbiddenException,
     InvalidCredentials,
     InactiveUserException,
+    LLMConfigurationException,
+    LLMRequestException,
+    LLMServiceException,
 )
 from app.repository.elastic_repository import ElasticRepository
 from app.routers import (
@@ -26,6 +29,9 @@ from app.routers.exception_handlers import (
     inactive_user_handler,
     not_found_handler,
     invalid_page_handler,
+    llm_configuration_handler,
+    llm_request_handler,
+    llm_service_handler,
     forbidden_handler,
 )
 from app.utils import create_dirs
@@ -70,3 +76,6 @@ app.add_exception_handler(IncorrectEmailOrPasswordException, incorrect_email_or_
 app.add_exception_handler(InvalidCredentials, invalid_credentials_handler)
 app.add_exception_handler(ForbiddenException, forbidden_handler)
 app.add_exception_handler(InactiveUserException, inactive_user_handler)
+app.add_exception_handler(LLMConfigurationException, llm_configuration_handler)
+app.add_exception_handler(LLMRequestException, llm_request_handler)
+app.add_exception_handler(LLMServiceException, llm_service_handler)

@@ -430,6 +430,36 @@ async def add_todo(
     return {"status": "success", "details": "Todo added"}
 
 
+@todo_router.post("/ai/generate-title/", status_code=status.HTTP_200_OK)
+async def generate_title_with_llm(
+    todo_service: Annotated[TodoService, Depends(get_todo_service)],
+    details: str = Form(""),
+    title: str = Form(""),
+):
+    generated_title = await todo_service.generate_title_with_llm(
+        details=details,
+        current_title=title,
+    )
+    return {"title": generated_title}
+
+
+@todo_router.post("/ai/suggest-tag/", status_code=status.HTTP_200_OK)
+async def suggest_tag_with_llm(
+    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+    current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
+    todo_service: Annotated[TodoService, Depends(get_todo_service)],
+    details: str = Form(""),
+    title: str = Form(""),
+):
+    result = await todo_service.suggest_tag_with_llm(
+        uow_session=uow_session,
+        current_user=current_user,
+        title=title,
+        details=details,
+    )
+    return result
+
+
 @todo_router.get(
     "/edit/{todo_id}/", response_class=HTMLResponse, status_code=status.HTTP_200_OK
 )
@@ -515,6 +545,25 @@ async def summarize_todo(
         "status": "success",
         "details": "Spacy summary created",
         "spacy_summary": summary,
+    }
+
+
+@todo_router.post("/llm/summarize/{todo_id}/", status_code=status.HTTP_200_OK)
+async def summarize_todo_with_llm(
+    todo_id: int,
+    user: Annotated[SUserInfo, Depends(get_current_active_user)],
+    uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+    todo_service: Annotated[TodoService, Depends(get_todo_service)],
+):
+    summary = await todo_service.summarize_with_llm(
+        uow_session=uow_session,
+        todo_id=todo_id,
+        user=user,
+    )
+    return {
+        "status": "success",
+        "details": "LLM summary created",
+        "llm_summary": summary,
     }
 
 

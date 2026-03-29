@@ -11,6 +11,9 @@
                data-masked-value="{{ todo.display_title }}">
         <label for="title">Введите название задачи</label>
     </div>
+    <div class="d-flex justify-content-end">
+        <button type="button" class="btn btn-outline-primary btn-sm" id="generateTitleBtn">Подобрать заголовок через OpenRouter</button>
+    </div>
     <div class="form-floating">
         <textarea class="form-control" maxlength="500" placeholder="Введите описание задачи" name="details" id="details"
                   style="height: 100px"
@@ -45,6 +48,11 @@
         <div class="form-text text-muted">Тег не задан</div>
         {% endif %}
     </div>
+    <div class="d-flex justify-content-end">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="suggestTagBtn">Предложить тег через OpenRouter</button>
+    </div>
+
+    <div id="llmActionMessage" class="alert d-none mb-0" role="alert"></div>
 
     <div class="form-group">
         <label for="created_at">Дата создания:</label>
@@ -78,20 +86,39 @@
             <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
                 <div>
                     <h4 class="h5 mb-1">Реферат через spaCy</h4>
-                    <p class="text-muted small mb-0">Краткое изложение сути заметки на основе русского NLP-пайплайна.</p>
+                    <p class="text-muted small mb-0">Сравнение экстрактивного реферата spaCy и LLM-реферата OpenRouter.</p>
                 </div>
-                <button type="button" id="generateSummaryButton" class="btn btn-outline-primary">
-                    Сформировать реферат
-                </button>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="button" id="generateSummaryButton" class="btn btn-outline-primary">
+                        Сформировать spaCy-реферат
+                    </button>
+                    <button type="button" id="generateLlmSummaryButton" class="btn btn-outline-secondary">
+                        Сформировать OpenRouter-реферат
+                    </button>
+                </div>
             </div>
 
             <div id="summaryMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
-            <textarea
-                id="spacySummary"
-                class="form-control mt-3"
-                rows="5"
-                readonly
-            >{{ todo.spacy_summary or '' }}</textarea>
+            <div class="row g-3 mt-1">
+                <div class="col-12 col-lg-6">
+                    <label for="spacySummary" class="form-label small text-muted">spaCy</label>
+                    <textarea
+                        id="spacySummary"
+                        class="form-control"
+                        rows="6"
+                        readonly
+                    >{{ todo.spacy_summary or '' }}</textarea>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <label for="llmSummary" class="form-label small text-muted">OpenRouter</label>
+                    <textarea
+                        id="llmSummary"
+                        class="form-control"
+                        rows="6"
+                        readonly
+                    >{{ todo.llm_summary or '' }}</textarea>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -156,11 +183,11 @@
 </style>
 
 <script>
+    const titleInput = document.getElementById('title');
+    const detailsInput = document.getElementById('details');
+
     document.getElementById('todoForm').addEventListener('submit', function (e) {
         e.preventDefault();
-
-        const titleInput = document.getElementById('title');
-        const detailsInput = document.getElementById('details');
 
         if (titleInput.dataset.maskedValue === titleInput.value) {
             titleInput.value = titleInput.dataset.originalValue;
@@ -186,8 +213,19 @@
     });
 
     const generateSummaryButton = document.getElementById('generateSummaryButton');
+    const generateLlmSummaryButton = document.getElementById('generateLlmSummaryButton');
     const summaryMessage = document.getElementById('summaryMessage');
     const spacySummary = document.getElementById('spacySummary');
+    const llmSummary = document.getElementById('llmSummary');
+    const generateTitleBtn = document.getElementById('generateTitleBtn');
+    const suggestTagBtn = document.getElementById('suggestTagBtn');
+    const llmActionMessage = document.getElementById('llmActionMessage');
+
+    function showLlmActionMessage(text, kind = 'success') {
+        llmActionMessage.className = `alert alert-${kind} mb-0`;
+        llmActionMessage.textContent = text;
+        llmActionMessage.classList.remove('d-none');
+    }
 
     function showSummaryMessage(text, kind = 'success') {
         summaryMessage.className = `alert alert-${kind} mt-3 mb-0`;
@@ -215,7 +253,31 @@
             showSummaryMessage(error.message || 'Не удалось сформировать реферат.', 'danger');
         } finally {
             generateSummaryButton.disabled = false;
-            generateSummaryButton.textContent = 'Сформировать реферат';
+            generateSummaryButton.textContent = 'Сформировать spaCy-реферат';
+        }
+    });
+
+    generateLlmSummaryButton.addEventListener('click', async () => {
+        generateLlmSummaryButton.disabled = true;
+        generateLlmSummaryButton.textContent = 'Формируем...';
+
+        try {
+            const response = await fetchWithAuth('/todo/llm/summarize/{{ todo.id }}/', {
+                method: 'POST'
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Не удалось сформировать реферат через OpenRouter');
+            }
+
+            llmSummary.value = data.llm_summary || '';
+            showSummaryMessage('OpenRouter-реферат успешно сформирован и сохранён.', 'success');
+        } catch (error) {
+            showSummaryMessage(error.message || 'Не удалось сформировать реферат через OpenRouter.', 'danger');
+        } finally {
+            generateLlmSummaryButton.disabled = false;
+            generateLlmSummaryButton.textContent = 'Сформировать OpenRouter-реферат';
         }
     });
 
@@ -307,6 +369,53 @@
 
     tagInput.addEventListener('input', () => {
         clearTagBtn.style.display = tagInput.value ? '' : 'none';
+    });
+
+    generateTitleBtn.addEventListener('click', async () => {
+        generateTitleBtn.disabled = true;
+        try {
+            const formData = new FormData();
+            formData.append('title', titleInput.value);
+            formData.append('details', detailsInput.value);
+            const response = await fetchWithAuth('/todo/ai/generate-title/', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || 'Не удалось сгенерировать заголовок');
+            }
+            titleInput.value = data.title || '';
+            showLlmActionMessage('OpenRouter предложил заголовок.', 'success');
+        } catch (error) {
+            showLlmActionMessage(error.message || 'Не удалось сгенерировать заголовок.', 'danger');
+        } finally {
+            generateTitleBtn.disabled = false;
+        }
+    });
+
+    suggestTagBtn.addEventListener('click', async () => {
+        suggestTagBtn.disabled = true;
+        try {
+            const formData = new FormData();
+            formData.append('title', titleInput.value);
+            formData.append('details', detailsInput.value);
+            const response = await fetchWithAuth('/todo/ai/suggest-tag/', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || 'Не удалось подобрать тег');
+            }
+            tagInput.value = data.tag || '';
+            clearTagBtn.style.display = tagInput.value ? '' : 'none';
+            showLlmActionMessage(`OpenRouter предложил тег. Похожих заметок в кластере: ${data.cluster_size || 0}.`, 'success');
+        } catch (error) {
+            showLlmActionMessage(error.message || 'Не удалось подобрать тег.', 'danger');
+        } finally {
+            suggestTagBtn.disabled = false;
+        }
     });
 
     fetchWithAuth('/todo/api/tags/')

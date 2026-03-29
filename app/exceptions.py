@@ -38,3 +38,15 @@ class ForbiddenException(AppException):
 
 class InvalidCredentials(AppException):
     pass
+
+
+class LLMConfigurationException(AppException):
+    pass
+
+
+class LLMServiceException(AppException):
+    pass
+
+
+class LLMRequestException(AppException):
+    pass

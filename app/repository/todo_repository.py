@@ -124,6 +124,18 @@ class TodoRepository:
             user_id=user_id,
         )
 
+    async def update_llm_summary(
+        self,
+        todo_id: int,
+        llm_summary: str | None,
+        user_id: int,
+    ) -> None:
+        await self.update(
+            todo_id=todo_id,
+            values={"llm_summary": llm_summary},
+            user_id=user_id,
+        )
+
     async def delete_todo(self, todo_id: int):
         await self._session.execute(delete(Todo).where(Todo.id == todo_id))
 

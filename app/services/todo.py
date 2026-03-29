@@ -3,16 +3,20 @@ import math
 import random
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from types import SimpleNamespace
+
 from fastapi import UploadFile
 
 from app.core import UnitOfWork
 from app.exceptions import (
     ForbiddenException,
     InvalidPageException,
+    LLMRequestException,
     NotFoundException,
 )
 from app.models import Todo as TodoORM
 from app.schemas import SUserInfo, Tags, Todo as TodoSchema, TodoSource, UserRole
+from app.services.openrouter import OpenRouterService
 from app.services.search_index import build_search_document
 from app.services.search_index import enrich_todo_display_list
 from app.services.search_index import merge_search_hits_with_todos
@@ -77,6 +81,9 @@ GENERATED_DETAILS = [
 
 
 class TodoService:
+    def __init__(self, openrouter_service: OpenRouterService) -> None:
+        self._openrouter_service = openrouter_service
+
     @staticmethod
     def _can_view_only_own_todos(user: SUserInfo) -> bool:
         return user.role == UserRole.VIEWER
@@ -88,6 +95,48 @@ class TodoService:
     @staticmethod
     def _resolve_author_id(user: SUserInfo) -> int | None:
         return user.id if user.role == UserRole.VIEWER else None
+
+    @staticmethod
+    def _normalize_llm_text(text: str, fallback: str | None = None) -> str:
+        normalized = text.strip().strip("\"'«»")
+        normalized = " ".join(normalized.split())
+        return normalized or (fallback or "")
+
+    @staticmethod
+    def _ensure_llm_source_text(details: str | None) -> str:
+        if not details or not details.strip():
+            raise LLMRequestException(
+                "Для LLM-операции нужно заполнить описание заметки."
+            )
+        return details.strip()
+
+    @staticmethod
+    def _build_cluster_context(cluster_todos_data: Sequence[TodoORM]) -> str:
+        lines = []
+        for todo in cluster_todos_data[:8]:
+            tag = todo.tag or "без тега"
+            lines.append(
+                f"- Заголовок: {todo.title or 'без заголовка'}; "
+                f"Тег: {tag}; "
+                f"Описание: {(todo.details or '').strip()[:180]}"
+            )
+        return "\n".join(lines) if lines else "Похожих заметок в кластере не найдено."
+
+    def _get_cluster_for_draft(
+        self,
+        todos: Sequence[TodoORM],
+        title: str | None,
+        details: str,
+    ) -> list[TodoORM]:
+        draft = SimpleNamespace(id=-1, title=title or "", details=details)
+        clusters = cluster_todos([*todos, draft], n_clusters=3)
+        for cluster in clusters:
+            cluster_items = cluster["todos"]
+            if any(getattr(item, "id", None) == -1 for item in cluster_items):
+                return [
+                    item for item in cluster_items if getattr(item, "id", None) != -1
+                ]
+        return list(todos[:5])
 
     @staticmethod
     async def _resolve_image(
@@ -389,6 +438,7 @@ class TodoService:
                 image_hash=resolved_image_hash,
                 details_hash=hash_text(details) if details else todo.details_hash,
                 spacy_summary=todo.spacy_summary,
+                llm_summary=todo.llm_summary,
             )
 
             if todo_change.completed:
@@ -397,6 +447,7 @@ class TodoService:
             todo_change.source = TodoSource(todo.source)
             if title != todo.title or details != todo.details:
                 todo_change.spacy_summary = None
+                todo_change.llm_summary = None
 
             await uow_session.todo.update(
                 todo_id=todo_id,
@@ -433,6 +484,71 @@ class TodoService:
                 user_id=user.id,
             )
             return summary
+
+    async def summarize_with_llm(
+        self,
+        uow_session: UnitOfWork,
+        todo_id: int,
+        user: SUserInfo,
+    ) -> str:
+        async with uow_session.start():
+            todo = await uow_session.todo.get_todo_by_id(todo_id)
+            if not todo:
+                raise NotFoundException(f"Todo with id {todo_id} not found")
+            if todo.author_id != user.id:
+                raise ForbiddenException("Вы можете реферировать только свои задачи")
+
+            summary = await self._openrouter_service.generate_summary(todo.title, todo.details)
+            summary = self._normalize_llm_text(summary)
+            await uow_session.todo.update_llm_summary(
+                todo_id=todo_id,
+                llm_summary=summary,
+                user_id=user.id,
+            )
+            return summary
+
+    async def generate_title_with_llm(
+        self,
+        details: str | None,
+        current_title: str | None = None,
+    ) -> str:
+        resolved_details = self._ensure_llm_source_text(details)
+        title = await self._openrouter_service.generate_title(
+            details=resolved_details,
+            current_title=current_title,
+        )
+        return self._normalize_llm_text(title, fallback=current_title)
+
+    async def suggest_tag_with_llm(
+        self,
+        uow_session: UnitOfWork,
+        current_user: SUserInfo,
+        title: str | None,
+        details: str | None,
+    ) -> dict:
+        resolved_details = self._ensure_llm_source_text(details)
+        author_id = self._resolve_author_id(current_user)
+
+        async with uow_session.start():
+            todos = await uow_session.todo.get_many(
+                limit=1000,
+                skip=0,
+                author_id=author_id,
+            )
+            existing_tags = await uow_session.elastic.get_all_tags()
+
+        cluster_items = self._get_cluster_for_draft(todos, title, resolved_details)
+        cluster_context = self._build_cluster_context(cluster_items)
+        suggested_tag = await self._openrouter_service.suggest_tag(
+            title=title,
+            details=resolved_details,
+            cluster_context=cluster_context,
+            existing_tags=existing_tags,
+        )
+        return {
+            "tag": self._normalize_llm_text(suggested_tag),
+            "cluster_size": len(cluster_items),
+        }
 
     async def get_clusters(
         self,

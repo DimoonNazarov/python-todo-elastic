@@ -2,9 +2,6 @@ from enum import Enum
 from datetime import datetime
 from pydantic import BaseModel
 from pydantic import Field
-from typing import Optional
-
-
 class TodoSource(str, Enum):
     created = "Созданная"
     generated = "Сгенерированная"
@@ -18,7 +15,7 @@ class Tags(str, Enum):
 
 
 class Todo(BaseModel):
-    id: Optional[int] = Field(default=None, alias="id")
+    id: int | None = Field(default=None, alias="id")
     title: str = Field(min_length=3, max_length=200, default="Задача")
     details: str = Field(max_length=500, default="Описание задачи")
     completed: bool = Field(default=False)
@@ -31,6 +28,7 @@ class Todo(BaseModel):
     image_hash: str | None = Field(default=None)
     details_hash: str | None = Field(default=None)
     spacy_summary: str | None = Field(default=None)
+    llm_summary: str | None = Field(default=None)
 
     model_config = {
         "json_schema_extra": {

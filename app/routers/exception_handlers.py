@@ -9,6 +9,9 @@ from app.exceptions import (
     ForbiddenException,
     InvalidCredentials,
     InactiveUserException,
+    LLMConfigurationException,
+    LLMRequestException,
+    LLMServiceException,
     UserAlreadyExists,
 )
 from app.schemas import UserRole
@@ -82,4 +85,28 @@ async def inactive_user_handler(request: Request, exc: Exception) -> HTMLRespons
     assert isinstance(exc, InactiveUserException)
     return templates.TemplateResponse(
         request, "login.html", {"error": "Inactive user"}, status_code=403
+    )
+
+
+async def llm_configuration_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, LLMConfigurationException)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": str(exc)},
+    )
+
+
+async def llm_service_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, LLMServiceException)
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        content={"detail": str(exc)},
+    )
+
+
+async def llm_request_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, LLMRequestException)
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": str(exc)},
     )

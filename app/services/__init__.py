@@ -1,5 +1,6 @@
 __all__ = [
     "AuthService",
+    "OpenRouterService",
     "TodoService",
     "build_search_document",
     "detect_classification",
@@ -16,6 +17,10 @@ def __getattr__(name: str):
         from .auth import AuthService
 
         return AuthService
+    if name == "OpenRouterService":
+        from .openrouter import OpenRouterService
+
+        return OpenRouterService
     if name == "TodoService":
         from .todo import TodoService
 
