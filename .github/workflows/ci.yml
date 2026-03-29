@@ -72,4 +72,4 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           ELASTICSEARCH_HOST: http://localhost:9200
-        run: pytest tests/test_todos.py -v --tb=short
+        run: pytest tests -v --tb=short
