@@ -2,7 +2,6 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-
 SECRET_CLASSIFICATIONS = [
     "секретно",
     "совершенно секретно",
@@ -196,6 +195,12 @@ def _set_value(item: Any, field: str, value: Any) -> Any:
 
 
 def detect_classification(text: str | None) -> str | None:
+    """
+    Определяет уровень секретности текста.
+
+    Проверяет наличие ключевых фраз в тексте и возвращает наивысший
+    найденный уровень (порядок проверки важен: сначала более важные).
+    """
     if not text:
         return None
 
@@ -213,7 +218,16 @@ def detect_classification(text: str | None) -> str | None:
     return None
 
 
-def mask_classification(text: str | None, classification: str | None = None) -> str | None:
+def mask_classification(
+    text: str | None, classification: str | None = None
+) -> str | None:
+    """
+    Заменяет секретные фразы в тексте на безобидные замены.
+
+    Проходит по всем известным секретным фразам и заменяет их на
+    соответствующие значения из CLASSIFICATION_REPLACEMENTS.
+    Замена происходит с сохранением регистра первой буквы.
+    """
     if not text:
         return text
 
@@ -227,18 +241,34 @@ def mask_classification(text: str | None, classification: str | None = None) -> 
 
 
 def build_masked_fields(title: str, details: str | None) -> dict[str, Any]:
+    """
+    Создает маскированные версии полей задачи на основе её содержимого.
+
+    Анализирует заголовок и описание, определяет уровень секретности,
+    и создает маскированные копии полей с заменой секретных фраз.
+    """
     full_text = f"{title} {details}" if details else title
     classification = detect_classification(full_text)
     return {
         "classification_level": classification,
-        "masked_title": mask_classification(title, classification) if classification else title,
+        "masked_title": (
+            mask_classification(title, classification) if classification else title
+        ),
         "masked_details": (
-            mask_classification(details, classification) if classification and details else details
+            mask_classification(details, classification)
+            if classification and details
+            else details
         ),
     }
 
 
 def build_search_document(todo: Any) -> dict[str, Any]:
+    """
+    Преобразует объект задачи в документ для индексации в Elasticsearch.
+
+    Извлекает все необходимые поля из задачи, добавляет маскированные версии
+    для секретного контента и преобразует даты в ISO-формат.
+    """
     masked = build_masked_fields(_get_value(todo, "title"), _get_value(todo, "details"))
     return {
         "todo_id": _get_value(todo, "id"),
@@ -258,6 +288,18 @@ def build_search_document(todo: Any) -> dict[str, Any]:
 
 
 def enrich_todo_display(item: Any) -> Any:
+    """
+    Обогащает объект задачи полями для безопасного отображения на фронтенде.
+
+    Добавляет/гарантирует наличие следующих полей:
+    - classification_level: уровень секретности
+    - masked_title / masked_details: маскированные версии
+    - author_email: email автора (денормализация)
+    - display_title / display_details: поля для непосредственного показа
+
+    Если задача секретная — display-поля содержат маскированную версию.
+    Если нет — оригинальный текст.
+    """
     title = _get_value(item, "title")
     details = _get_value(item, "details")
     masked_title = _get_value(item, "masked_title")
@@ -285,10 +327,20 @@ def enrich_todo_display(item: Any) -> Any:
 
 
 def enrich_todo_display_list(items: Sequence[Any]) -> list[Any]:
+    """Применяет enrich_todo_display ко всем элементам коллекции."""
     return [enrich_todo_display(item) for item in items]
 
 
-def merge_search_hits_with_todos(hits: Sequence[dict[str, Any]], todos: Sequence[Any]) -> list[dict[str, Any]]:
+def merge_search_hits_with_todos(
+    hits: Sequence[dict[str, Any]], todos: Sequence[Any]
+) -> list[dict[str, Any]]:
+    """
+    Объединяет результаты поиска из Elasticsearch с данными из базы данных.
+
+    Elasticsearch возвращает только индексные данные (с релевантностью и подсветкой),
+    но для полной информации о задаче нужны данные из PostgreSQL.
+    Эта функция объединяет оба источника, дополняя результат поиска
+    полными данными из БД и обогащая их для отображения"""
     todos_by_id = {_get_value(todo, "id"): todo for todo in todos}
     merged: list[dict[str, Any]] = []
 
@@ -324,4 +376,10 @@ def merge_search_hits_with_todos(hits: Sequence[dict[str, Any]], todos: Sequence
 
 
 def _isoformat(value: Any) -> str | None:
+    """
+    Преобразует datetime объект в ISO-строку.
+
+    Используется при подготовке документов для Elasticsearch,
+    который ожидает даты в строковом формате.
+    """
     return value.isoformat() if value else None
