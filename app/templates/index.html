@@ -12,9 +12,12 @@
         <button type="button" class="btn btn-outline-primary btn-sm" id="generateTitleBtn">Подобрать заголовок через OpenRouter</button>
     </div>
     <div class="form-floating">
-        <textarea maxlength="500" class="form-control" placeholder="Введите описание задач" name="details" id="details"
-                  style="height: 100px"></textarea>
+        <textarea class="form-control" placeholder="Введите описание задач" name="details" id="details"
+                  style="height: 140px"></textarea>
         <label for="details">Введите описание задач</label>
+    </div>
+    <div id="detailsLimitMessage" class="alert alert-warning d-none mb-0" role="alert">
+        Описание заметки не может превышать 1000 символов. Текст был обрезан.
     </div>
 
     <div class="position-relative">
@@ -85,11 +88,34 @@
     const generateTitleBtn = document.getElementById('generateTitleBtn');
     const suggestTagBtn = document.getElementById('suggestTagBtn');
     const llmActionMessage = document.getElementById('llmActionMessage');
+    const detailsInput = document.getElementById('details');
+    const detailsLimitMessage = document.getElementById('detailsLimitMessage');
+    const DETAILS_MAX_LENGTH = 1000;
+    let detailsLimitTimer = null;
 
     function showLlmActionMessage(text, kind = 'success') {
         llmActionMessage.textContent = text;
         llmActionMessage.className = `alert alert-${kind} mb-0`;
         llmActionMessage.classList.remove('d-none');
+    }
+
+    function showDetailsLimitMessage() {
+        if (detailsLimitTimer) {
+            clearTimeout(detailsLimitTimer);
+        }
+        detailsLimitMessage.classList.remove('d-none');
+        detailsLimitTimer = setTimeout(() => {
+            detailsLimitMessage.classList.add('d-none');
+            detailsLimitTimer = null;
+        }, 5000);
+    }
+
+    function clampDetailsValue() {
+        if (detailsInput.value.length <= DETAILS_MAX_LENGTH) {
+            return;
+        }
+        detailsInput.value = detailsInput.value.slice(0, DETAILS_MAX_LENGTH);
+        showDetailsLimitMessage();
     }
 
     // ── Tag autocomplete ──────────────────────────────────────
@@ -193,6 +219,10 @@
         }
     }
     document.getElementById('due_date').addEventListener('change', updateDayLabel);
+    detailsInput.addEventListener('input', clampDetailsValue);
+    detailsInput.addEventListener('paste', () => {
+        setTimeout(clampDetailsValue, 0);
+    });
 
     generateTitleBtn.addEventListener('click', async () => {
         generateTitleBtn.disabled = true;
@@ -269,6 +299,7 @@
 
         this.reset();
         document.getElementById('due_day_label').textContent = '';
+        detailsLimitMessage.classList.add('d-none');
     });
 </script>
 
