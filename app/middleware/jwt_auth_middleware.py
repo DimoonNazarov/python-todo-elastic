@@ -122,6 +122,9 @@ class JwtAuthMiddleware(BaseHTTPMiddleware):
         if path in self.PUBLIC_PATHS or any(
             path.startswith(p) for p in self.PUBLIC_PREFIXES
         ):
+            _, user_payload = _check_authorization(request)
+            if user_payload is not None:
+                request.state.user = user_payload
             return await call_next(request)
 
         # Проверяем авторизацию
