@@ -1,0 +1,10 @@
+services:
+
+networks:
+  elastic:
+    driver: bridge
+
+volumes:
+  esdata01:
+  esdata02:
+  esdata03:
