@@ -86,3 +86,42 @@ sudo sysctl -w vm.max_map_count=262144
 ```bash
 echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
 ```
+
+### Развёртывание С интернетом
+
+```bash
+sudo docker compose -f docker-compose-cluster.yml up -d
+```
+
+Проверить готовность (подождать ~60 секунд):
+
+```bash
+curl http://localhost:9200/_cluster/health?pretty
+```
+
+Ожидаемый результат: `"status": "green"` и `"number_of_nodes": 3`.
+
+### Развёртывание БЕЗ интернета
+
+Сохранить образы на машине с интернетом:
+
+```bash
+sudo docker pull elasticsearch:9.3.0
+sudo docker pull kibana:9.3.0
+
+sudo docker save elasticsearch:9.3.0 | gzip > elasticsearch-9.3.0.tar.gz
+sudo docker save kibana:9.3.0        | gzip > kibana-9.3.0.tar.gz
+```
+
+Перенести архивы на целевую машину (флешка, scp, rsync) и загрузить:
+
+```bash
+sudo docker load < elasticsearch-9.3.0.tar.gz
+sudo docker load < kibana-9.3.0.tar.gz
+```
+
+После загрузки запуск стандартный — интернет больше не нужен:
+
+```bash
+sudo docker compose -f docker-compose-cluster.yml up -d
+```
