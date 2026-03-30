@@ -472,7 +472,7 @@ class TodoService:
             if not todo:
                 raise NotFoundException(f"Todo with id {todo_id} not found")
 
-            if todo.author_id != user.id:
+            if user.role != UserRole.ADMIN and todo.author_id != user.id:
                 raise ForbiddenException("Вы можете редактировать только свои задачи")
 
             if details != todo.details:
@@ -527,7 +527,7 @@ class TodoService:
             if not todo:
                 raise NotFoundException(f"Todo with id {todo_id} not found")
 
-            if todo.author_id != user.id:
+            if user.role != UserRole.ADMIN and todo.author_id != user.id:
                 raise ForbiddenException("Вы можете реферировать только свои задачи")
 
             summary = build_spacy_summary(todo.title, todo.details)
@@ -548,7 +548,7 @@ class TodoService:
             todo = await uow_session.todo.get_todo_by_id(todo_id)
             if not todo:
                 raise NotFoundException(f"Todo with id {todo_id} not found")
-            if todo.author_id != user.id:
+            if user.role != UserRole.ADMIN and todo.author_id != user.id:
                 raise ForbiddenException("Вы можете реферировать только свои задачи")
 
             summary = await self._openrouter_service.generate_summary(todo.title, todo.details)
@@ -642,7 +642,7 @@ class TodoService:
 
             images = await uow_session.todo.get_all_image_paths()
 
-            if todo.author_id != user.id:
+            if user.role != UserRole.ADMIN and todo.author_id != user.id:
                 raise ForbiddenException("Вы можете редактировать только свои задачи")
 
         return todo, images

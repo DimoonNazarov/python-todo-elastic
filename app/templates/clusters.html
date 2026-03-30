@@ -107,7 +107,7 @@
                 <div class="d-flex align-items-center ms-lg-auto flex-shrink-0">
                     <a class="btn btn-success"
                        href="/todo/edit/{{ todo.id }}/"
-                       data-can-edit="{% if todo.author_id == current_user_id %}true{% else %}false{% endif %}">
+                       data-can-edit="{% if current_user_role == 'admin' or todo.author_id == current_user_id %}true{% else %}false{% endif %}">
                         Редактировать
                     </a>
                 </div>

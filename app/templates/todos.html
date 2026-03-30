@@ -267,7 +267,7 @@
                data-todo-id="{{ todo.id }}" data-todo-title="{{ todo.title }}"
                data-todo-details="{{ todo.details }}" data-todo-tag="{{ todo.tag }}" data-todo-date="{{ todo.created_at }}"
                data-todo-image="{{ todo.image_path }}"
-               data-can-edit="{% if todo.author_id == current_user_id %}true{% else %}false{% endif %}"
+               data-can-edit="{% if current_user_role == 'admin' or todo.author_id == current_user_id %}true{% else %}false{% endif %}"
                {% if todo.completed %}checked{% endif %}>
     </div>
 
@@ -276,7 +276,7 @@
            href="/todo/edit/{{ todo.id }}/?limit={{ limit }}&skip={{ page }}"
            data-todo-id="{{ todo.id }}"
            data-todo-title="{{ todo.title }}"
-           data-can-edit="{% if todo.author_id == current_user_id %}true{% else %}false{% endif %}">Редактировать</a>
+           data-can-edit="{% if current_user_role == 'admin' or todo.author_id == current_user_id %}true{% else %}false{% endif %}">Редактировать</a>
         <button class="btn btn-danger deleteButton" href="#"
                 data-todo-id="{{ todo.id }}"
                 data-todo-title="{{ todo.title }}"
