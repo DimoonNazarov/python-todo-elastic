@@ -384,20 +384,17 @@ class ElasticRepository:
         author_id: int | None = None,
     ):
         """Возвращает все тудушки из индекса"""
-        try:
-            query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body={
-                    "from": skip,
-                    "size": limit,
-                    "query": query,
-                    "sort": [{"created_at": {"order": "desc"}}],
-                },
-            )
-            return [hit["_source"] for hit in response["hits"]["hits"]]
-        except Exception as e:
-            logger.error("Failed to get all todos: %s", e)
+        query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
+        response = await self._client.search(
+            index=INDEX_NAME,
+            body={
+                "from": skip,
+                "size": limit,
+                "query": query,
+                "sort": [{"created_at": {"order": "desc"}}],
+            },
+        )
+        return [hit["_source"] for hit in response["hits"]["hits"]]
 
     async def get_top_words(self, limit: int = 10, author_id: int | None = None):
         try:
