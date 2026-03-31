@@ -113,5 +113,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/python-todo-elastic:latest
-            ghcr.io/${{ github.repository_owner }}/python-todo-elastic:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner_lowercase || github.repository_owner }}/python-todo-elastic:latest
+            ghcr.io/${{ github.repository_owner_lowercase || github.repository_owner }}/python-todo-elastic:${{ github.sha }}
