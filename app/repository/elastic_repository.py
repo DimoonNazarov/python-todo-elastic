@@ -160,11 +160,9 @@ class ElasticRepository:
         """Удаляет документ задачи из индекса."""
         try:
             await self._client.delete(index=INDEX_NAME, id=str(todo_id))
-            logger.info("Deleted todo %s from index", todo_id )
+            logger.info("Deleted todo %s from index", todo_id)
         except NotFoundError:
             logger.warning("Todo %s not found in index on delete.", todo_id)
-        except Exception as e:
-            logger.error("Failed to delete todo %s from index: %s", todo_id, e)
 
     async def search_todos(
         self,
