@@ -297,41 +297,35 @@ class ElasticRepository:
 
     async def get_statistics(self) -> dict:
         """Получает статистику по индексу"""
-        try:
-            # Подсчет документов по классификации
-            agg_query = {
-                "size": 0,
-                "aggs": {
-                    "by_classification": {"terms": {"field": "classification_level"}},
-                    "by_tag": {"terms": {"field": "tag"}},
-                    "total_count": {"value_count": {"field": "todo_id"}},
-                },
-            }
+        agg_query = {
+            "size": 0,
+            "aggs": {
+                "by_classification": {"terms": {"field": "classification_level"}},
+                "by_tag": {"terms": {"field": "tag"}},
+                "total_count": {"value_count": {"field": "todo_id"}},
+            },
+        }
 
-            response = await self._client.search(index=INDEX_NAME, body=agg_query)
+        response = await self._client.search(index=INDEX_NAME, body=agg_query)
 
-            stats = {
-                "total": response["hits"]["total"]["value"],
-                "by_classification": {},
-                "by_tag": {},
-            }
+        stats = {
+            "total": response["hits"]["total"]["value"],
+            "by_classification": {},
+            "by_tag": {},
+        }
 
-            if "aggregations" in response:
-                aggs = response["aggregations"]
+        if "aggregations" in response:
+            aggs = response["aggregations"]
 
-                if "by_classification" in aggs:
-                    for bucket in aggs["by_classification"]["buckets"]:
-                        stats["by_classification"][bucket["key"]] = bucket["doc_count"]
+            if "by_classification" in aggs:
+                for bucket in aggs["by_classification"]["buckets"]:
+                    stats["by_classification"][bucket["key"]] = bucket["doc_count"]
 
-                if "by_tag" in aggs:
-                    for bucket in aggs["by_tag"]["buckets"]:
-                        stats["by_tag"][bucket["key"]] = bucket["doc_count"]
+            if "by_tag" in aggs:
+                for bucket in aggs["by_tag"]["buckets"]:
+                    stats["by_tag"][bucket["key"]] = bucket["doc_count"]
 
-            return stats
-
-        except Exception as e:
-            logger.error("Failed to get statistics: %s", e  )
-            return {}
+        return stats
 
     async def search_by_date(
         self,
