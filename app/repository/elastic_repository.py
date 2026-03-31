@@ -153,12 +153,8 @@ class ElasticRepository:
 
     async def index_document(self, todo_id: int, document: dict):
         """Индексирует уже подготовленный документ задачи."""
-        try:
-            await self._client.index(index=INDEX_NAME, id=str(todo_id), document=document)
-            logger.info("Successfully indexed todo %s", todo_id)
-
-        except Exception as e:
-            logger.error("Failed to update todo %s in index: %s", todo_id, e)
+        await self._client.index(index=INDEX_NAME, id=str(todo_id), document=document)
+        logger.info("Successfully indexed todo %s", todo_id)
 
     async def delete_todo(self, todo_id: int):
         """Удаляет документ задачи из индекса."""
@@ -167,8 +163,6 @@ class ElasticRepository:
             logger.info("Deleted todo %s from index", todo_id )
         except NotFoundError:
             logger.warning("Todo %s not found in index on delete.", todo_id)
-        except Exception as e:
-            logger.error("Failed to delete todo %s from index: %s", todo_id, e)
 
     async def search_todos(
         self,

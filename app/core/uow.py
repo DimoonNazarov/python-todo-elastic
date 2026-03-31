@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from logging import getLogger
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from app.repository import AuthRepository
 from app.repository.elastic_repository import ElasticRepository
 from app.repository.token_repository import TokenRepository
 
+logger = getLogger(__name__)
 
 class UnitOfWork:
     def __init__(
@@ -20,19 +22,36 @@ class UnitOfWork:
         self.session_factory = session_factory
         self._session: AsyncSession | None = None
         self.es_client: AsyncElasticsearch | None = es_client
+        self._compensations = []
 
 
     @asynccontextmanager
     async def start(self):
         self._session = self.session_factory()
+        self._compensations = []
         try:
             yield self
             await self._session.commit()
         except Exception as e:
             await self._session.rollback()
+            await self._run_compensations()
             raise e
         finally:
+            self._compensations = []
             await self._session.close()
+
+    async def flush(self) -> None:
+        await self._session.flush()
+
+    def add_compensation(self, callback, *args, **kwargs) -> None:
+        self._compensations.append((callback, args, kwargs))
+
+    async def _run_compensations(self) -> None:
+        for callback, args, kwargs in reversed(self._compensations):
+            try:
+                await callback(*args, **kwargs)
+            except Exception as exc:
+                logger.error("Compensation failed: %s", exc)
 
     @property
     def todo(self) -> TodoRepository:

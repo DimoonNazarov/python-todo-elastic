@@ -14,6 +14,7 @@ from app.exceptions import (
     InvalidPageException,
     LLMRequestException,
     NotFoundException,
+    SearchSyncException,
 )
 from app.models import Todo as TodoORM, TodoEditHistory
 from app.schemas import SUserInfo, Tags, Todo as TodoSchema, TodoSource, UserRole
@@ -230,19 +231,13 @@ class TodoService:
         )
 
     @staticmethod
-    async def _sync_todo_to_search_index(
+    async def _index_todo_in_search(
         uow_session: UnitOfWork,
-        todo_id: int,
+        todo: TodoORM,
     ) -> None:
-        async with uow_session.start():
-            todo = await uow_session.todo.get_todo_by_id(todo_id)
-
-        if not todo:
-            return
-
         document = build_search_document(todo)
         await uow_session.elastic.ensure_index_exists()
-        await uow_session.elastic.index_document(todo_id, document)
+        await uow_session.elastic.index_document(todo.id, document)
 
     @staticmethod
     def _parse_data(date_str: str | None) -> datetime | None:
@@ -311,10 +306,12 @@ class TodoService:
             )
 
             await uow_session.todo.add(todo)
-        try:
-            await self._sync_todo_to_search_index(uow_session, todo.id)
-        except Exception as e:
-            logger.error("Elastic indexing failed: %s", e)
+            await uow_session.flush()
+            try:
+                await self._index_todo_in_search(uow_session, todo)
+            except Exception as exc:
+                raise SearchSyncException("Не удалось синхронизировать задачу с Elasticsearch.") from exc
+            uow_session.add_compensation(uow_session.elastic.delete_todo, todo.id)
 
     async def get_todos_page(
         self,
@@ -517,6 +514,7 @@ class TodoService:
             if not has_changes:
                 return todo
 
+            previous_document = build_search_document(todo)
             todo_change = TodoSchema(
                 title=title,
                 details=details,
@@ -547,10 +545,15 @@ class TodoService:
             await uow_session.todo.add_edit_history(
                 self._build_todo_history_entry(updated_todo, user.id, "edit")
             )
-        try:
-            await self._sync_todo_to_search_index(uow_session, todo_id)
-        except Exception as e:
-            logger.error("Elastic update failed: %s", e)
+            try:
+                await self._index_todo_in_search(uow_session, updated_todo)
+            except Exception as exc:
+                raise SearchSyncException("Не удалось синхронизировать изменения задачи с Elasticsearch.") from exc
+            uow_session.add_compensation(
+                uow_session.elastic.index_document,
+                todo_id,
+                previous_document,
+            )
 
         return updated_todo
 
@@ -708,6 +711,7 @@ class TodoService:
                 raise ForbiddenException("Вы можете удалять только свои задачи")
 
             logger.info("Deleting todo: %s", todo)
+            deleted_document = build_search_document(todo)
             if (
                 await uow_session.todo.get_todos_by_image_path(
                     image_path=todo.image_path,
@@ -719,8 +723,13 @@ class TodoService:
             await uow_session.todo.delete_todo(todo_id)
             try:
                 await uow_session.elastic.delete_todo(todo_id)
-            except Exception as e:
-                logger.error("Elastic delete failed: %s", e)
+            except Exception as exc:
+                raise SearchSyncException("Не удалось удалить задачу из Elasticsearch.") from exc
+            uow_session.add_compensation(
+                uow_session.elastic.index_document,
+                todo_id,
+                deleted_document,
+            )
             return todo
 
     async def generate_random_todos(
@@ -772,13 +781,22 @@ class TodoService:
             for image_path in image_paths_to_delete:
                 await delete_image(image_path)
 
+            deleted_documents = {
+                todo.id: build_search_document(todo)
+                for todo in todos
+            }
             await uow_session.todo.delete_by_ids(todo_ids)
 
             for todo_id in todo_ids:
                 try:
                     await uow_session.elastic.delete_todo(todo_id=todo_id)
-                except Exception as e:
-                    logger.error("Elastic delete failed: %s", e)
+                except Exception as exc:
+                    raise SearchSyncException("Не удалось удалить задачи из Elasticsearch.") from exc
+                uow_session.add_compensation(
+                    uow_session.elastic.index_document,
+                    todo_id,
+                    deleted_documents[todo_id],
+                )
 
     async def delete_all_user_todos(
         self, uow_session: UnitOfWork, current_user: SUserInfo
@@ -805,6 +823,10 @@ class TodoService:
             )
 
             todo_ids = [todo.id for todo in user_todos]
+            deleted_documents = {
+                todo.id: build_search_document(todo)
+                for todo in user_todos
+            }
 
             image_paths_to_delete = []
             for todo in user_todos:
@@ -830,8 +852,13 @@ class TodoService:
             for todo_id in todo_ids:
                 try:
                     await uow_session.elastic.delete_todo(todo_id=todo_id)
-                except Exception as e:
-                    logger.error("Elastic delete failed: %s", e)
+                except Exception as exc:
+                    raise SearchSyncException("Не удалось удалить задачи из Elasticsearch.") from exc
+                uow_session.add_compensation(
+                    uow_session.elastic.index_document,
+                    todo_id,
+                    deleted_documents[todo_id],
+                )
             return len(todo_ids)
 
     async def get_notes_per_day(

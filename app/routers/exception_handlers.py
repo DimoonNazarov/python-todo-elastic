@@ -14,6 +14,7 @@ from app.exceptions import (
     LLMRequestException,
     LLMServiceException,
     UserAlreadyExists,
+    SearchSyncException,
 )
 from app.schemas import UserRole
 
@@ -117,5 +118,13 @@ async def invalid_todo_data_handler(request: Request, exc: Exception) -> JSONRes
     assert isinstance(exc, InvalidTodoDataException)
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": str(exc)},
+    )
+
+
+async def search_sync_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, SearchSyncException)
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY,
         content={"detail": str(exc)},
     )
