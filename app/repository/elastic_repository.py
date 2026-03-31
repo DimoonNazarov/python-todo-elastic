@@ -493,63 +493,58 @@ class ElasticRepository:
         Возвращает количество заметок по дням/неделям/месяцам в разрезе пользователей.
         :param interval: календарный интервал ('day', 'week', 'month')
         """
-        try:
-            from datetime import datetime, timedelta
+        from datetime import datetime, timedelta
 
-            date_from = (datetime.now() - timedelta(days=days)).date().isoformat()
-            date_format = self._INTERVAL_FORMATS.get(interval, "yyyy-MM-dd")
+        date_from = (datetime.now() - timedelta(days=days)).date().isoformat()
+        date_format = self._INTERVAL_FORMATS.get(interval, "yyyy-MM-dd")
 
-            query_filters = [{"range": {"created_at": {"gte": date_from}}}]
-            if author_id is not None:
-                query_filters.append({"term": {"author_id": author_id}})
+        query_filters = [{"range": {"created_at": {"gte": date_from}}}]
+        if author_id is not None:
+            query_filters.append({"term": {"author_id": author_id}})
 
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body={
-                    "size": 0,
-                    "query": {"bool": {"filter": query_filters}},
-                    "aggs": {
-                        "notes_per_period": {
-                            "date_histogram": {
-                                "field": "created_at",
-                                "calendar_interval": interval,
-                                "format": date_format,
-                                "min_doc_count": 0,
-                            },
-                            "aggs": {
-                                "by_author": {
-                                    "terms": {
-                                        "field": "author_id",
-                                        "size": 100,
-                                    }
+        response = await self._client.search(
+            index=INDEX_NAME,
+            body={
+                "size": 0,
+                "query": {"bool": {"filter": query_filters}},
+                "aggs": {
+                    "notes_per_period": {
+                        "date_histogram": {
+                            "field": "created_at",
+                            "calendar_interval": interval,
+                            "format": date_format,
+                            "min_doc_count": 0,
+                        },
+                        "aggs": {
+                            "by_author": {
+                                "terms": {
+                                    "field": "author_id",
+                                    "size": 100,
                                 }
-                            },
-                        }
-                    },
+                            }
+                        },
+                    }
                 },
-            )
+            },
+        )
 
-            result = []
-            if "aggregations" in response:
-                for bucket in response["aggregations"]["notes_per_period"]["buckets"]:
-                    result.append(
-                        {
-                            "date": bucket["key_as_string"],
-                            "total": bucket["doc_count"],
-                            "users": [
-                                {
-                                    "author_id": author_bucket["key"],
-                                    "count": author_bucket["doc_count"],
-                                }
-                                for author_bucket in bucket["by_author"]["buckets"]
-                            ],
-                        }
-                    )
-
-            return result
-        except Exception as e:
-            logger.error("Failed to get notes per period by user: %s", e)
-            return []
+        result = []
+        if "aggregations" in response:
+            for bucket in response["aggregations"]["notes_per_period"]["buckets"]:
+                result.append(
+                    {
+                        "date": bucket["key_as_string"],
+                        "total": bucket["doc_count"],
+                        "users": [
+                            {
+                                "author_id": author_bucket["key"],
+                                "count": author_bucket["doc_count"],
+                            }
+                            for author_bucket in bucket["by_author"]["buckets"]
+                        ],
+                    }
+                )
+        return result
 
     # ── Tags index ──────────────────────────────────────────────
 
