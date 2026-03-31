@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, UTC, timedelta, timezone
+from datetime import datetime, UTC, timedelta
 
 from app.config import settings
 from app.schemas import SUserRegister, SUserAuth, SUserInfo, Token, UserRole
@@ -7,7 +7,6 @@ from app.core import UnitOfWork
 from app.models import User, RefreshToken
 from app.exceptions import (
     UserAlreadyExists,
-    InactiveUserException,
     IncorrectEmailOrPasswordException,
     InvalidCredentials,
     ForbiddenException,
