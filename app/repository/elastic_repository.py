@@ -160,7 +160,7 @@ class ElasticRepository:
         """Удаляет документ задачи из индекса."""
         try:
             await self._client.delete(index=INDEX_NAME, id=str(todo_id))
-            logger.info("Deleted todo %s from index", todo_id )
+            logger.info("Deleted todo %s from index", todo_id)
         except NotFoundError:
             logger.warning("Todo %s not found in index on delete.", todo_id)
 
@@ -172,7 +172,6 @@ class ElasticRepository:
         skip: int = 0,
         author_id: int | None = None,
     ) -> dict:
-
         """
         Полнотекстовый поиск по title и details с нестрогим соответствием.
         Использует русский анализатор для учета морфологии.
@@ -231,116 +230,101 @@ class ElasticRepository:
         if author_id is not None:
             must_clauses.append({"term": {"author_id": author_id}})
 
-        try:
-            # Убеждаемся, что индекс существует
-            await self.ensure_index_exists()
+        # Убеждаемся, что индекс существует
+        await self.ensure_index_exists()
 
-            # Выполняем поиск
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body={
-                    "from": skip * limit,
-                    "size": limit,
-                    "query": {
-                        "bool": {
-                            "should": should_clauses,
-                            "must": must_clauses,
-                            "minimum_should_match": 1,
-                        }
-                    },
-                    "sort": [
-                        {"_score": {"order": "desc"}},  # Сначала по релевантности
-                        {"created_at": {"order": "desc"}},  # Потом по дате
-                    ],
-                    "highlight": {  # Подсветка совпадений
-                        "fields": {
-                            "title": {"number_of_fragments": 1},
-                            "details": {"number_of_fragments": 2},
-                            "masked_title": {"number_of_fragments": 1},
-                            "masked_details": {"number_of_fragments": 2},
-                        },
-                        "pre_tags": ["<mark>"],
-                        "post_tags": ["</mark>"],
-                    },
+        # Выполняем поиск
+        response = await self._client.search(
+            index=INDEX_NAME,
+            body={
+                "from": skip * limit,
+                "size": limit,
+                "query": {
+                    "bool": {
+                        "should": should_clauses,
+                        "must": must_clauses,
+                        "minimum_should_match": 1,
+                    }
                 },
-            )
+                "sort": [
+                    {"_score": {"order": "desc"}},  # Сначала по релевантности
+                    {"created_at": {"order": "desc"}},  # Потом по дате
+                ],
+                "highlight": {  # Подсветка совпадений
+                    "fields": {
+                        "title": {"number_of_fragments": 1},
+                        "details": {"number_of_fragments": 2},
+                        "masked_title": {"number_of_fragments": 1},
+                        "masked_details": {"number_of_fragments": 2},
+                    },
+                    "pre_tags": ["<mark>"],
+                    "post_tags": ["</mark>"],
+                },
+            },
+        )
 
-            results = []
-            for hit in response["hits"]["hits"]:
-                source = hit["_source"]
-                # Добавляем информацию о релевантности и подсветке
-                result = {
-                    **source,
-                    "_score": hit["_score"],
-                    "_id": hit["_id"],
-                }
-                if "highlight" in hit:
-                    result["highlight"] = hit["highlight"]
-                results.append(result)
+        results = []
+        for hit in response["hits"]["hits"]:
+            source = hit["_source"]
+            # Добавляем информацию о релевантности и подсветке
+            result = {
+                **source,
+                "_score": hit["_score"],
+                "_id": hit["_id"],
+            }
+            if "highlight" in hit:
+                result["highlight"] = hit["highlight"]
+            results.append(result)
 
-            total = response["hits"]["total"]["value"]
-            logger.info("Search for '%s' found %d results", query_text, len(results))
-            return {"items": results, "total": total}
-
-        except Exception as e:
-            logger.error("Search failed: %s", e)
-            return {"items": [], "total": 0}
+        total = response["hits"]["total"]["value"]
+        logger.info("Search for '%s' found %d results", query_text, len(results))
+        return {"items": results, "total": total}
 
     async def search_by_classification(
         self, classification: str, limit: int = 50
     ) -> list[dict]:
         """Поиск тудушек по уровню секретности"""
-        try:
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body={
-                    "size": limit,
-                    "query": {"term": {"classification_level": classification}},
-                    "sort": [{"created_at": {"order": "desc"}}],
-                },
-            )
-            return [hit["_source"] for hit in response["hits"]["hits"]]
-        except Exception as e:
-            logger.error("Search by classification failed: %s", e)
-            return []
+        response = await self._client.search(
+            index=INDEX_NAME,
+            body={
+                "size": limit,
+                "query": {"term": {"classification_level": classification}},
+                "sort": [{"created_at": {"order": "desc"}}],
+            },
+        )
+        return [hit["_source"] for hit in response["hits"]["hits"]]
 
     async def get_statistics(self) -> dict:
         """Получает статистику по индексу"""
-        try:
-            # Подсчет документов по классификации
-            agg_query = {
-                "size": 0,
-                "aggs": {
-                    "by_classification": {"terms": {"field": "classification_level"}},
-                    "by_tag": {"terms": {"field": "tag"}},
-                    "total_count": {"value_count": {"field": "todo_id"}},
-                },
-            }
+        agg_query = {
+            "size": 0,
+            "aggs": {
+                "by_classification": {"terms": {"field": "classification_level"}},
+                "by_tag": {"terms": {"field": "tag"}},
+                "total_count": {"value_count": {"field": "todo_id"}},
+            },
+        }
 
-            response = await self._client.search(index=INDEX_NAME, body=agg_query)
+        response = await self._client.search(index=INDEX_NAME, body=agg_query)
 
-            stats = {
-                "total": response["hits"]["total"]["value"],
-                "by_classification": {},
-                "by_tag": {},
-            }
+        stats = {
+            "total": response["hits"]["total"]["value"],
+            "by_classification": {},
+            "by_tag": {},
+        }
 
-            if "aggregations" in response:
-                aggs = response["aggregations"]
+        if "aggregations" in response:
+            aggs = response["aggregations"]
 
-                if "by_classification" in aggs:
-                    for bucket in aggs["by_classification"]["buckets"]:
-                        stats["by_classification"][bucket["key"]] = bucket["doc_count"]
+            if "by_classification" in aggs:
+                for bucket in aggs["by_classification"]["buckets"]:
+                    stats["by_classification"][bucket["key"]] = bucket["doc_count"]
 
-                if "by_tag" in aggs:
-                    for bucket in aggs["by_tag"]["buckets"]:
-                        stats["by_tag"][bucket["key"]] = bucket["doc_count"]
+            if "by_tag" in aggs:
+                for bucket in aggs["by_tag"]["buckets"]:
+                    stats["by_tag"][bucket["key"]] = bucket["doc_count"]
 
-            return stats
-
-        except Exception as e:
-            logger.error("Failed to get statistics: %s", e  )
-            return {}
+        return stats
 
     async def search_by_date(
         self,
@@ -350,27 +334,22 @@ class ElasticRepository:
         author_id: int| None= None,
     ) -> dict:
         """Возвращает все тудушки, созданные после указанной даты"""
-        try:
-            must_filters = [{"range": {"created_at": {"gte": date_from}}}]
-            if author_id is not None:
-                must_filters.append({"term": {"author_id": author_id}})
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body={
-                    "from": skip * limit,
-                    "size": limit,
-                    "query": {"bool": {"filter": must_filters}},
-                    "sort": [{"created_at": {"order": "desc"}}],
-                },
-            )
-
-            return {
-                "items": [hit["_source"] for hit in response["hits"]["hits"]],
-                "total": response["hits"]["total"]["value"],
-            }
-        except Exception as e:
-            logger.error( "Failed to get search results: %s", e)
-            return {"items": [], "total": 0}
+        must_filters = [{"range": {"created_at": {"gte": date_from}}}]
+        if author_id is not None:
+            must_filters.append({"term": {"author_id": author_id}})
+        response = await self._client.search(
+            index=INDEX_NAME,
+            body={
+                "from": skip * limit,
+                "size": limit,
+                "query": {"bool": {"filter": must_filters}},
+                "sort": [{"created_at": {"order": "desc"}}],
+            },
+        )
+        return {
+            "items": [hit["_source"] for hit in response["hits"]["hits"]],
+            "total": response["hits"]["total"]["value"],
+        }
 
     async def search_by_tag(
         self,
@@ -380,27 +359,22 @@ class ElasticRepository:
         author_id: int | None = None,
     ) -> dict:
         """Возвращает все тудушки с заданным тегом"""
-        try:
-            filters = [{"term": {"tag": tag}}]
-            if author_id is not None:
-                filters.append({"term": {"author_id": author_id}})
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body={
-                    "from": skip * limit,
-                    "size": limit,
-                    "query": {"bool": {"filter": filters}},
-                    "sort": [{"created_at": {"order": "desc"}}],
-                },
-            )
-
-            return {
-                "items": [hit["_source"] for hit in response["hits"]["hits"]],
-                "total": response["hits"]["total"]["value"],
-            }
-        except Exception as e:
-            logger.error( "Failed to get search results: %s", e)
-            return {"items": [], "total": 0}
+        filters = [{"term": {"tag": tag}}]
+        if author_id is not None:
+            filters.append({"term": {"author_id": author_id}})
+        response = await self._client.search(
+            index=INDEX_NAME,
+            body={
+                "from": skip * limit,
+                "size": limit,
+                "query": {"bool": {"filter": filters}},
+                "sort": [{"created_at": {"order": "desc"}}],
+            },
+        )
+        return {
+            "items": [hit["_source"] for hit in response["hits"]["hits"]],
+            "total": response["hits"]["total"]["value"],
+        }
 
     async def get_all_todos(
         self,
@@ -409,61 +383,51 @@ class ElasticRepository:
         author_id: int | None = None,
     ):
         """Возвращает все тудушки из индекса"""
-        try:
-            query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body={
-                    "from": skip,
-                    "size": limit,
-                    "query": query,
-                    "sort": [{"created_at": {"order": "desc"}}],
-                },
-            )
-            return [hit["_source"] for hit in response["hits"]["hits"]]
-        except Exception as e:
-            logger.error("Failed to get all todos: %s", e)
+        query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
+        response = await self._client.search(
+            index=INDEX_NAME,
+            body={
+                "from": skip,
+                "size": limit,
+                "query": query,
+                "sort": [{"created_at": {"order": "desc"}}],
+            },
+        )
+        return [hit["_source"] for hit in response["hits"]["hits"]]
 
     async def get_top_words(self, limit: int = 10, author_id: int | None = None):
-        try:
-            query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body={
-                    "size": 0,
-                    "query": query,
-                    "aggs": {
-                        "top_title": {"terms": {"field": "title.agg", "size": limit}},
-                        "top_details": {
-                            "terms": {"field": "details.agg", "size": limit}
-                        },
+        query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
+        response = await self._client.search(
+            index=INDEX_NAME,
+            body={
+                "size": 0,
+                "query": query,
+                "aggs": {
+                    "top_title": {"terms": {"field": "title.agg", "size": limit}},
+                    "top_details": {
+                        "terms": {"field": "details.agg", "size": limit}
                     },
                 },
+            },
+        )
+
+        words_counter = {}
+        aggs = response.get("aggregations", {})
+
+        for bucket in aggs.get("top_title", {}).get("buckets", []):
+            words_counter[bucket["key"]] = bucket["doc_count"]
+
+        for bucket in aggs.get("top_details", {}).get("buckets", []):
+            words_counter[bucket["key"]] = (
+                words_counter.get(bucket["key"], 0) + bucket["doc_count"]
             )
 
-            words_counter = {}
-
-            aggs = response.get("aggregations", {})
-
-            for bucket in aggs.get("top_title", {}).get("buckets", []):
-                words_counter[bucket["key"]] = bucket["doc_count"]
-
-            for bucket in aggs.get("top_details", {}).get("buckets", []):
-                words_counter[bucket["key"]] = (
-                    words_counter.get(bucket["key"], 0) + bucket["doc_count"]
-                )
-
-            sorted_words = sorted(
-                words_counter.items(), key=lambda x: x[1], reverse=True
-            )
-
-            return [
-                {"word": word, "count": count} for word, count in sorted_words[:limit]
-            ]
-
-        except Exception as e:
-            logger.error("Failed to get top words: %s", e)
-            return []
+        sorted_words = sorted(
+            words_counter.items(), key=lambda x: x[1], reverse=True
+        )
+        return [
+            {"word": word, "count": count} for word, count in sorted_words[:limit]
+        ]
 
     _INTERVAL_FORMATS = {
         "day": "yyyy-MM-dd",
@@ -482,47 +446,41 @@ class ElasticRepository:
         :param days: количество дней для анализа
         :param interval: календарный интервал ('day', 'week', 'month')
         """
-        try:
-            from datetime import datetime, timedelta
+        from datetime import datetime, timedelta
 
-            date_from = (datetime.now() - timedelta(days=days)).isoformat()
-            date_format = self._INTERVAL_FORMATS.get(interval, "yyyy-MM-dd")
+        date_from = (datetime.now() - timedelta(days=days)).isoformat()
+        date_format = self._INTERVAL_FORMATS.get(interval, "yyyy-MM-dd")
 
-            query_filters = [{"range": {"created_at": {"gte": date_from}}}]
-            if author_id is not None:
-                query_filters.append({"term": {"author_id": author_id}})
+        query_filters = [{"range": {"created_at": {"gte": date_from}}}]
+        if author_id is not None:
+            query_filters.append({"term": {"author_id": author_id}})
 
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body={
-                    "size": 0,
-                    "query": {"bool": {"filter": query_filters}},
-                    "aggs": {
-                        "notes_per_period": {
-                            "date_histogram": {
-                                "field": "created_at",
-                                "calendar_interval": interval,
-                                "format": date_format,
-                                "min_doc_count": 0,
-                            }
+        response = await self._client.search(
+            index=INDEX_NAME,
+            body={
+                "size": 0,
+                "query": {"bool": {"filter": query_filters}},
+                "aggs": {
+                    "notes_per_period": {
+                        "date_histogram": {
+                            "field": "created_at",
+                            "calendar_interval": interval,
+                            "format": date_format,
+                            "min_doc_count": 0,
                         }
-                    },
-                    "sort": [{"created_at": {"order": "asc"}}],
+                    }
                 },
-            )
+                "sort": [{"created_at": {"order": "asc"}}],
+            },
+        )
 
-            result = []
-            if "aggregations" in response:
-                for bucket in response["aggregations"]["notes_per_period"]["buckets"]:
-                    result.append(
-                        {"date": bucket["key_as_string"], "count": bucket["doc_count"]}
-                    )
-
-            return result
-
-        except Exception as e:
-            logger.error("Failed to get notes per period: %s", e)
-            return []
+        result = []
+        if "aggregations" in response:
+            for bucket in response["aggregations"]["notes_per_period"]["buckets"]:
+                result.append(
+                    {"date": bucket["key_as_string"], "count": bucket["doc_count"]}
+                )
+        return result
 
     async def get_notes_per_day_by_user(
         self,
@@ -534,63 +492,58 @@ class ElasticRepository:
         Возвращает количество заметок по дням/неделям/месяцам в разрезе пользователей.
         :param interval: календарный интервал ('day', 'week', 'month')
         """
-        try:
-            from datetime import datetime, timedelta
+        from datetime import datetime, timedelta
 
-            date_from = (datetime.now() - timedelta(days=days)).date().isoformat()
-            date_format = self._INTERVAL_FORMATS.get(interval, "yyyy-MM-dd")
+        date_from = (datetime.now() - timedelta(days=days)).date().isoformat()
+        date_format = self._INTERVAL_FORMATS.get(interval, "yyyy-MM-dd")
 
-            query_filters = [{"range": {"created_at": {"gte": date_from}}}]
-            if author_id is not None:
-                query_filters.append({"term": {"author_id": author_id}})
+        query_filters = [{"range": {"created_at": {"gte": date_from}}}]
+        if author_id is not None:
+            query_filters.append({"term": {"author_id": author_id}})
 
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body={
-                    "size": 0,
-                    "query": {"bool": {"filter": query_filters}},
-                    "aggs": {
-                        "notes_per_period": {
-                            "date_histogram": {
-                                "field": "created_at",
-                                "calendar_interval": interval,
-                                "format": date_format,
-                                "min_doc_count": 0,
-                            },
-                            "aggs": {
-                                "by_author": {
-                                    "terms": {
-                                        "field": "author_id",
-                                        "size": 100,
-                                    }
+        response = await self._client.search(
+            index=INDEX_NAME,
+            body={
+                "size": 0,
+                "query": {"bool": {"filter": query_filters}},
+                "aggs": {
+                    "notes_per_period": {
+                        "date_histogram": {
+                            "field": "created_at",
+                            "calendar_interval": interval,
+                            "format": date_format,
+                            "min_doc_count": 0,
+                        },
+                        "aggs": {
+                            "by_author": {
+                                "terms": {
+                                    "field": "author_id",
+                                    "size": 100,
                                 }
-                            },
-                        }
-                    },
+                            }
+                        },
+                    }
                 },
-            )
+            },
+        )
 
-            result = []
-            if "aggregations" in response:
-                for bucket in response["aggregations"]["notes_per_period"]["buckets"]:
-                    result.append(
-                        {
-                            "date": bucket["key_as_string"],
-                            "total": bucket["doc_count"],
-                            "users": [
-                                {
-                                    "author_id": author_bucket["key"],
-                                    "count": author_bucket["doc_count"],
-                                }
-                                for author_bucket in bucket["by_author"]["buckets"]
-                            ],
-                        }
-                    )
-
-            return result
-        except Exception as e:
-            logger.error("Failed to get notes per period by user: %s", e)
-            return []
+        result = []
+        if "aggregations" in response:
+            for bucket in response["aggregations"]["notes_per_period"]["buckets"]:
+                result.append(
+                    {
+                        "date": bucket["key_as_string"],
+                        "total": bucket["doc_count"],
+                        "users": [
+                            {
+                                "author_id": author_bucket["key"],
+                                "count": author_bucket["doc_count"],
+                            }
+                            for author_bucket in bucket["by_author"]["buckets"]
+                        ],
+                    }
+                )
+        return result
 
     # ── Tags index ──────────────────────────────────────────────
 
@@ -618,99 +571,74 @@ class ElasticRepository:
             }
             await self._client.indices.create(index=self.TAGS_INDEX, body=mapping)
             logger.info("Tags index created.")
-            from datetime import datetime as _dt
-            for name in ["Учёба", "Личное", "Планы"]:
-                await self._client.index(
-                    index=self.TAGS_INDEX,
-                    id=name.lower(),
-                    document={"name": name, "created_at": _dt.now().isoformat()},
-                )
-            # Принудительный refresh чтобы теги сразу были видны в поиске
-            await self._client.indices.refresh(index=self.TAGS_INDEX)
 
     async def get_all_tags(self) -> list[str]:
         """Возвращает все теги по алфавиту."""
-        try:
-            await self._ensure_tags_index()
-            response = await self._client.search(
-                index=self.TAGS_INDEX,
-                body={"size": 200, "query": {"match_all": {}}, "sort": [{"name": "asc"}]},
-            )
-            return [hit["_source"]["name"] for hit in response["hits"]["hits"]]
-        except Exception as e:
-            logger.error("Failed to get tags: %s", e)
-            return []
+        await self._ensure_tags_index()
+        response = await self._client.search(
+            index=self.TAGS_INDEX,
+            body={"size": 200, "query": {"match_all": {}}, "sort": [{"name": "asc"}]},
+        )
+        return [hit["_source"]["name"] for hit in response["hits"]["hits"]]
 
     async def create_tag(self, name: str) -> bool:
         """Создаёт тег. Возвращает False если тег уже существует."""
-        try:
-            await self._ensure_tags_index()
-            name = name.strip()
-            doc_id = name.lower()
-            exists = await self._client.exists(index=self.TAGS_INDEX, id=doc_id)
-            if exists:
-                return False
-            from datetime import datetime as _dt
-            await self._client.index(
-                index=self.TAGS_INDEX,
-                id=doc_id,
-                document={"name": name, "created_at": _dt.now().isoformat()},
-            )
-            await self._client.indices.refresh(index=self.TAGS_INDEX)
-            return True
-        except Exception as e:
-            logger.error("Failed to create tag '%s': %s", name, e)
+        await self._ensure_tags_index()
+        doc_id = name.lower()
+        exists = await self._client.exists(index=self.TAGS_INDEX, id=doc_id)
+        if exists:
             return False
+        from datetime import datetime as _dt
+        await self._client.index(
+            index=self.TAGS_INDEX,
+            id=doc_id,
+            document={"name": name, "created_at": _dt.now().isoformat()},
+        )
+        await self._client.indices.refresh(index=self.TAGS_INDEX)
+        return True
 
     async def delete_tag(self, name: str) -> bool:
         """Удаляет тег. Возвращает False если тег не найден."""
+        await self._ensure_tags_index()
         try:
-            await self._ensure_tags_index()
             await self._client.delete(index=self.TAGS_INDEX, id=name.lower().strip())
             return True
         except NotFoundError:
             return False
-        except Exception as e:
-            logger.error("Failed to delete tag '%s': %s", name, e)
-            return False
 
     async def suggest_tags(self, query: str, limit: int = 10) -> list[str]:
         """Автодополнение тегов по запросу (prefix + fuzzy)."""
-        try:
-            await self._ensure_tags_index()
-            response = await self._client.search(
-                index=self.TAGS_INDEX,
-                body={
-                    "size": limit,
-                    "query": {
-                        "bool": {
-                            "should": [
-                                {
-                                    "multi_match": {
+        await self._ensure_tags_index()
+        response = await self._client.search(
+            index=self.TAGS_INDEX,
+            body={
+                "size": limit,
+                "query": {
+                    "bool": {
+                        "should": [
+                            {
+                                "multi_match": {
+                                    "query": query,
+                                    "type": "bool_prefix",
+                                    "fields": [
+                                        "name.suggest",
+                                        "name.suggest._2gram",
+                                        "name.suggest._3gram",
+                                    ],
+                                    "boost": 2,
+                                }
+                            },
+                            {
+                                "match": {
+                                    "name.suggest": {
                                         "query": query,
-                                        "type": "bool_prefix",
-                                        "fields": [
-                                            "name.suggest",
-                                            "name.suggest._2gram",
-                                            "name.suggest._3gram",
-                                        ],
-                                        "boost": 2,
+                                        "fuzziness": "AUTO",
                                     }
-                                },
-                                {
-                                    "match": {
-                                        "name.suggest": {
-                                            "query": query,
-                                            "fuzziness": "AUTO",
-                                        }
-                                    }
-                                },
-                            ]
-                        }
-                    },
+                                }
+                            },
+                        ]
+                    }
                 },
-            )
-            return [hit["_source"]["name"] for hit in response["hits"]["hits"]]
-        except Exception as e:
-            logger.error("Failed to suggest tags for '%s': %s", query, e)
-            return []
+            },
+        )
+        return [hit["_source"]["name"] for hit in response["hits"]["hits"]]
