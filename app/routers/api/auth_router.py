@@ -228,7 +228,7 @@ async def refresh_and_redirect(
             refresh_token=refresh_token,
             uow_session=uow_session,
         )
-    except Exception as e:
+    except Exception:
         response = RedirectResponse("/auth/login", status_code=302)
         response.delete_cookie("access_token")
         response.delete_cookie("refresh_token", path="/auth")

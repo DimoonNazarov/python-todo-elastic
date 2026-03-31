@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -7,10 +7,27 @@ on:
     branches: [master, main]
 
 jobs:
-  test:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-    # Сервисы — Docker-контейнеры, которые поднимаются рядом с job
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff
+        run: ruff check .
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
     services:
       postgres:
         image: postgres:16
@@ -20,7 +37,6 @@ jobs:
           POSTGRES_DB: postgres
         ports:
           - 5432:5432
-        # Ждём, пока PostgreSQL будет готов принимать соединения
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -42,11 +58,9 @@ jobs:
           --health-retries 10
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
@@ -65,7 +79,6 @@ jobs:
 
       - name: Run tests
         env:
-          # Переменные окружения для подключения к сервисам
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5432
           POSTGRES_DB: postgres
@@ -73,3 +86,32 @@ jobs:
           POSTGRES_PASSWORD: postgres
           ELASTICSEARCH_HOST: http://localhost:9200
         run: pytest tests -v --tb=short
+
+  build:
+    name: Build & Push Docker image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/dimoonNazarov/python-todo-elastic:latest
+            ghcr.io/dimoonNazarov/python-todo-elastic:${{ github.sha }}

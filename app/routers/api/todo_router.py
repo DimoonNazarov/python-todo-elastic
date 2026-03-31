@@ -20,8 +20,8 @@ from starlette.responses import HTMLResponse
 
 from app.core import get_async_uow_session, UnitOfWork
 from app.dependencies import get_todo_service
-from app.routers.dependencies import get_current_user, get_current_active_user
-from app.schemas import TodoSource, Todo, SUserInfo, UserRole
+from app.routers.dependencies import get_current_active_user
+from app.schemas import TodoSource, SUserInfo, UserRole
 from app.services.search_index import enrich_todo_display
 from app.services.todo import TodoService
 from app.utils import (
@@ -200,7 +200,7 @@ async def page_401(request: Request):
 @todo_router.get(
     "/info-tasks/", response_class=HTMLResponse, status_code=status.HTTP_200_OK
 )
-async def get_home(request: Request):
+async def get_info_tasks(request: Request):
     """Main page with todo list"""
 
     return templates.TemplateResponse(request, "info-tasks.html")
@@ -519,7 +519,7 @@ async def edit_todo(
 ):
     """Edit todo"""
     tag = tag.strip() if tag and tag.strip() else "Планы"
-    todo = await todo_service.update(
+    await todo_service.update(
         uow_session=uow_session,
         user=user,
         todo_id=todo_id,
@@ -634,7 +634,10 @@ async def visualize_todos(
 
 
 @todo_router.get(
-    "/generate/", response_class=HTMLResponse, status_code=status.HTTP_200_OK
+    "/generate/",
+    response_class=HTMLResponse,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(get_current_active_user)],
 )
 async def show_generate(request: Request):
     return templates.TemplateResponse(request, "generate.html")
@@ -670,13 +673,16 @@ async def generate_todos(
 @todo_router.get(
     "/export/", response_class=HTMLResponse, status_code=status.HTTP_200_OK
 )
-async def visualize_todos(request: Request):
+async def export_page(request: Request):
     """Page export and import todos from excel file"""
     return templates.TemplateResponse(request, "export.html")
 
 
 @todo_router.post(
-    "/import", response_class=RedirectResponse, status_code=status.HTTP_303_SEE_OTHER
+    "/import",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_303_SEE_OTHER,
+    dependencies=[Depends(get_current_active_user)],
 )
 async def import_file(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
@@ -695,13 +701,13 @@ async def import_file(
 
 
 @todo_router.get("/import-log", response_class=HTMLResponse)
-async def import_file(request: Request):
+async def import_log_page(request: Request):
     files = os.listdir("./files/")
     return templates.TemplateResponse(request, "import-log.html", {"files": files})
 
 
 @todo_router.get("/import-log/{filename}", response_class=FileResponse)
-async def import_file(filename: str):
+async def import_log_file(filename: str):
     file_location = os.path.join("./files/", filename)
     return FileResponse(
         path=file_location,
