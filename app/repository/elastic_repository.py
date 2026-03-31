@@ -231,60 +231,55 @@ class ElasticRepository:
         if author_id is not None:
             must_clauses.append({"term": {"author_id": author_id}})
 
-        try:
-            # Убеждаемся, что индекс существует
-            await self.ensure_index_exists()
+        # Убеждаемся, что индекс существует
+        await self.ensure_index_exists()
 
-            # Выполняем поиск
-            response = await self._client.search(
-                index=INDEX_NAME,
-                body={
-                    "from": skip * limit,
-                    "size": limit,
-                    "query": {
-                        "bool": {
-                            "should": should_clauses,
-                            "must": must_clauses,
-                            "minimum_should_match": 1,
-                        }
-                    },
-                    "sort": [
-                        {"_score": {"order": "desc"}},  # Сначала по релевантности
-                        {"created_at": {"order": "desc"}},  # Потом по дате
-                    ],
-                    "highlight": {  # Подсветка совпадений
-                        "fields": {
-                            "title": {"number_of_fragments": 1},
-                            "details": {"number_of_fragments": 2},
-                            "masked_title": {"number_of_fragments": 1},
-                            "masked_details": {"number_of_fragments": 2},
-                        },
-                        "pre_tags": ["<mark>"],
-                        "post_tags": ["</mark>"],
-                    },
+        # Выполняем поиск
+        response = await self._client.search(
+            index=INDEX_NAME,
+            body={
+                "from": skip * limit,
+                "size": limit,
+                "query": {
+                    "bool": {
+                        "should": should_clauses,
+                        "must": must_clauses,
+                        "minimum_should_match": 1,
+                    }
                 },
-            )
+                "sort": [
+                    {"_score": {"order": "desc"}},  # Сначала по релевантности
+                    {"created_at": {"order": "desc"}},  # Потом по дате
+                ],
+                "highlight": {  # Подсветка совпадений
+                    "fields": {
+                        "title": {"number_of_fragments": 1},
+                        "details": {"number_of_fragments": 2},
+                        "masked_title": {"number_of_fragments": 1},
+                        "masked_details": {"number_of_fragments": 2},
+                    },
+                    "pre_tags": ["<mark>"],
+                    "post_tags": ["</mark>"],
+                },
+            },
+        )
 
-            results = []
-            for hit in response["hits"]["hits"]:
-                source = hit["_source"]
-                # Добавляем информацию о релевантности и подсветке
-                result = {
-                    **source,
-                    "_score": hit["_score"],
-                    "_id": hit["_id"],
-                }
-                if "highlight" in hit:
-                    result["highlight"] = hit["highlight"]
-                results.append(result)
+        results = []
+        for hit in response["hits"]["hits"]:
+            source = hit["_source"]
+            # Добавляем информацию о релевантности и подсветке
+            result = {
+                **source,
+                "_score": hit["_score"],
+                "_id": hit["_id"],
+            }
+            if "highlight" in hit:
+                result["highlight"] = hit["highlight"]
+            results.append(result)
 
-            total = response["hits"]["total"]["value"]
-            logger.info("Search for '%s' found %d results", query_text, len(results))
-            return {"items": results, "total": total}
-
-        except Exception as e:
-            logger.error("Search failed: %s", e)
-            return {"items": [], "total": 0}
+        total = response["hits"]["total"]["value"]
+        logger.info("Search for '%s' found %d results", query_text, len(results))
+        return {"items": results, "total": total}
 
     async def search_by_classification(
         self, classification: str, limit: int = 50
