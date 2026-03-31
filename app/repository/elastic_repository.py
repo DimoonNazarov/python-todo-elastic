@@ -584,16 +584,12 @@ class ElasticRepository:
 
     async def get_all_tags(self) -> list[str]:
         """Возвращает все теги по алфавиту."""
-        try:
-            await self._ensure_tags_index()
-            response = await self._client.search(
-                index=self.TAGS_INDEX,
-                body={"size": 200, "query": {"match_all": {}}, "sort": [{"name": "asc"}]},
-            )
-            return [hit["_source"]["name"] for hit in response["hits"]["hits"]]
-        except Exception as e:
-            logger.error("Failed to get tags: %s", e)
-            return []
+        await self._ensure_tags_index()
+        response = await self._client.search(
+            index=self.TAGS_INDEX,
+            body={"size": 200, "query": {"match_all": {}}, "sort": [{"name": "asc"}]},
+        )
+        return [hit["_source"]["name"] for hit in response["hits"]["hits"]]
 
     async def create_tag(self, name: str) -> bool:
         """Создаёт тег. Возвращает False если тег уже существует."""
@@ -630,41 +626,37 @@ class ElasticRepository:
 
     async def suggest_tags(self, query: str, limit: int = 10) -> list[str]:
         """Автодополнение тегов по запросу (prefix + fuzzy)."""
-        try:
-            await self._ensure_tags_index()
-            response = await self._client.search(
-                index=self.TAGS_INDEX,
-                body={
-                    "size": limit,
-                    "query": {
-                        "bool": {
-                            "should": [
-                                {
-                                    "multi_match": {
+        await self._ensure_tags_index()
+        response = await self._client.search(
+            index=self.TAGS_INDEX,
+            body={
+                "size": limit,
+                "query": {
+                    "bool": {
+                        "should": [
+                            {
+                                "multi_match": {
+                                    "query": query,
+                                    "type": "bool_prefix",
+                                    "fields": [
+                                        "name.suggest",
+                                        "name.suggest._2gram",
+                                        "name.suggest._3gram",
+                                    ],
+                                    "boost": 2,
+                                }
+                            },
+                            {
+                                "match": {
+                                    "name.suggest": {
                                         "query": query,
-                                        "type": "bool_prefix",
-                                        "fields": [
-                                            "name.suggest",
-                                            "name.suggest._2gram",
-                                            "name.suggest._3gram",
-                                        ],
-                                        "boost": 2,
+                                        "fuzziness": "AUTO",
                                     }
-                                },
-                                {
-                                    "match": {
-                                        "name.suggest": {
-                                            "query": query,
-                                            "fuzziness": "AUTO",
-                                        }
-                                    }
-                                },
-                            ]
-                        }
-                    },
+                                }
+                            },
+                        ]
+                    }
                 },
-            )
-            return [hit["_source"]["name"] for hit in response["hits"]["hits"]]
-        except Exception as e:
-            logger.error("Failed to suggest tags for '%s': %s", query, e)
-            return []
+            },
+        )
+        return [hit["_source"]["name"] for hit in response["hits"]["hits"]]
