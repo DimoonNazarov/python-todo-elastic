@@ -172,7 +172,6 @@ class ElasticRepository:
         skip: int = 0,
         author_id: int | None = None,
     ) -> dict:
-
         """
         Полнотекстовый поиск по title и details с нестрогим соответствием.
         Использует русский анализатор для учета морфологии.

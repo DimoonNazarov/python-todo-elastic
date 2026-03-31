@@ -112,7 +112,7 @@
                             {{ entry.edited_at.strftime('%Y-%m-%d %H:%M:%S') if entry.edited_at else '—' }}
                         </div>
                     </div>
-                    <div class="mt-3 small">
+                    <div class="history-entry-content mt-3 small">
                         <div><strong>Заголовок:</strong> {{ entry.title }}</div>
                         <div><strong>Тег:</strong> {{ entry.tag or '—' }}</div>
                         <div><strong>Статус:</strong> {% if entry.completed %}Выполнено{% else %}Не выполнено{% endif %}</div>
@@ -242,13 +242,12 @@
     }
 
     .history-scroll {
-        max-height: 360px;
+        max-height: 340px;
         overflow-y: auto;
         scroll-snap-type: y proximity;
     }
 
     .history-entry {
-        min-height: 300px;
         scroll-snap-align: start;
         background: rgba(255, 255, 255, 0.72);
     }
@@ -256,6 +255,9 @@
     .history-entry-description {
         max-height: 120px;
         overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 8px;
+        padding-bottom: 10px;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
         word-break: break-word;

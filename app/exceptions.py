@@ -54,3 +54,7 @@ class LLMRequestException(AppException):
 
 class InvalidTodoDataException(AppException):
     pass
+
+
+class SearchSyncException(AppException):
+    pass
