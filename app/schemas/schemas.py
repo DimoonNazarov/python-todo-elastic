@@ -1,7 +1,9 @@
 from enum import Enum
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from pydantic import Field
+
+
 class TodoSource(str, Enum):
     created = "Созданная"
     generated = "Сгенерированная"
@@ -45,3 +47,42 @@ class Todo(BaseModel):
             ]
         }
     }
+
+
+class TodoDisplaySchema(BaseModel):
+    id: int
+    title: str
+    details: str | None = None
+    masked_title: str | None = None
+    masked_details: str | None = None
+    classification_level: str | None = None
+    author_id: int
+    author_email: str | None = None
+    tag: str | None = None
+    completed: bool
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    image_path: str | None = None
+
+    # только для фронта, не сериализуются обратно в БД
+    display_title: str = Field(default="", exclude=False)
+    display_details: str | None = Field(default=None, exclude=False)
+
+    @model_validator(mode="after")
+    def fill_display_fields(self) -> "TodoDisplaySchema":
+        # Если masked поля не пришли — вычисляем на лету
+        from app.services.search_index import TodoClassificationService
+
+        svc = TodoClassificationService()
+
+        if self.classification_level is None and self.masked_title is None:
+            fields = svc.build_document_fields(self.title, self.details)
+            self.classification_level = fields["classification_level"]
+            self.masked_title = fields["masked_title"]
+            self.masked_details = fields["masked_details"]
+
+        self.display_title = self.masked_title or self.title
+        self.display_details = self.masked_details or self.details
+        return self
+
+    model_config = {"from_attributes": True}

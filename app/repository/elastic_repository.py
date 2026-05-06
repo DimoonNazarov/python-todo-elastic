@@ -1,7 +1,6 @@
 from elasticsearch import AsyncElasticsearch, NotFoundError
 import logging
-from app.services.search_index import ALL_STOPWORDS
-from app.services.search_index import CLASSIFICATION_REPLACEMENTS
+from app.constants import ALL_STOPWORDS, CLASSIFICATION_REPLACEMENTS
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +16,7 @@ def create_russian_analyzer_mapping():
                     "classification_osoboy_vazhnosti": {
                         "type": "pattern_replace",
                         "pattern": "(?iu)\\bособой\\s+важности\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS[
-                            "особой важности"
-                        ],
+                        "replacement": CLASSIFICATION_REPLACEMENTS["особой важности"],
                     },
                     "classification_sovershenno_sekretno": {
                         "type": "pattern_replace",
@@ -38,9 +35,7 @@ def create_russian_analyzer_mapping():
                     "classification_konfidencialno": {
                         "type": "pattern_replace",
                         "pattern": "(?iu)\\bконфиденциально\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS[
-                            "конфиденциально"
-                        ],
+                        "replacement": CLASSIFICATION_REPLACEMENTS["конфиденциально"],
                     },
                     "classification_dsp_short": {
                         "type": "pattern_replace",
@@ -139,6 +134,7 @@ def create_russian_analyzer_mapping():
         },
     }
 
+
 class ElasticRepository:
     def __init__(self, client: AsyncElasticsearch):
         self._client = client
@@ -154,7 +150,9 @@ class ElasticRepository:
     async def index_document(self, todo_id: int, document: dict):
         """Индексирует уже подготовленный документ задачи."""
         try:
-            await self._client.index(index=INDEX_NAME, id=str(todo_id), document=document)
+            await self._client.index(
+                index=INDEX_NAME, id=str(todo_id), document=document
+            )
             logger.info("Successfully indexed todo %s", todo_id)
 
         except Exception as e:
@@ -164,7 +162,7 @@ class ElasticRepository:
         """Удаляет документ задачи из индекса."""
         try:
             await self._client.delete(index=INDEX_NAME, id=str(todo_id))
-            logger.info("Deleted todo %s from index", todo_id )
+            logger.info("Deleted todo %s from index", todo_id)
         except NotFoundError:
             logger.warning("Todo %s not found in index on delete.", todo_id)
         except Exception as e:
@@ -178,7 +176,6 @@ class ElasticRepository:
         skip: int = 0,
         author_id: int | None = None,
     ) -> dict:
-
         """
         Полнотекстовый поиск по title и details с нестрогим соответствием.
         Использует русский анализатор для учета морфологии.
@@ -345,7 +342,7 @@ class ElasticRepository:
             return stats
 
         except Exception as e:
-            logger.error("Failed to get statistics: %s", e  )
+            logger.error("Failed to get statistics: %s", e)
             return {}
 
     async def search_by_date(
@@ -353,7 +350,7 @@ class ElasticRepository:
         date_from: str,
         limit: int = 50,
         skip: int = 0,
-        author_id: int| None= None,
+        author_id: int | None = None,
     ) -> dict:
         """Возвращает все тудушки, созданные после указанной даты"""
         try:
@@ -375,7 +372,7 @@ class ElasticRepository:
                 "total": response["hits"]["total"]["value"],
             }
         except Exception as e:
-            logger.error( "Failed to get search results: %s", e)
+            logger.error("Failed to get search results: %s", e)
             return {"items": [], "total": 0}
 
     async def search_by_tag(
@@ -405,7 +402,7 @@ class ElasticRepository:
                 "total": response["hits"]["total"]["value"],
             }
         except Exception as e:
-            logger.error( "Failed to get search results: %s", e)
+            logger.error("Failed to get search results: %s", e)
             return {"items": [], "total": 0}
 
     async def get_all_todos(
@@ -416,7 +413,11 @@ class ElasticRepository:
     ):
         """Возвращает все тудушки из индекса"""
         try:
-            query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
+            query = (
+                {"match_all": {}}
+                if author_id is None
+                else {"term": {"author_id": author_id}}
+            )
             response = await self._client.search(
                 index=INDEX_NAME,
                 body={
@@ -432,7 +433,11 @@ class ElasticRepository:
 
     async def get_top_words(self, limit: int = 10, author_id: int | None = None):
         try:
-            query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
+            query = (
+                {"match_all": {}}
+                if author_id is None
+                else {"term": {"author_id": author_id}}
+            )
             response = await self._client.search(
                 index=INDEX_NAME,
                 body={
@@ -614,17 +619,18 @@ class ElasticRepository:
                             "fields": {
                                 "suggest": {
                                     "type": "search_as_you_type",
-                                    "analyzer": "standard"
+                                    "analyzer": "standard",
                                 }
-                            }
+                            },
                         },
-                        "created_at": {"type": "date"}
+                        "created_at": {"type": "date"},
                     }
                 }
             }
             await self._client.indices.create(index=self.TAGS_INDEX, body=mapping)
             logger.info("Tags index created.")
             from datetime import datetime as _dt
+
             for name in ["Учёба", "Личное", "Планы"]:
                 await self._client.index(
                     index=self.TAGS_INDEX,
@@ -640,7 +646,11 @@ class ElasticRepository:
             await self._ensure_tags_index()
             response = await self._client.search(
                 index=self.TAGS_INDEX,
-                body={"size": 200, "query": {"match_all": {}}, "sort": [{"name": "asc"}]},
+                body={
+                    "size": 200,
+                    "query": {"match_all": {}},
+                    "sort": [{"name": "asc"}],
+                },
             )
             return [hit["_source"]["name"] for hit in response["hits"]["hits"]]
         except Exception as e:
@@ -657,6 +667,7 @@ class ElasticRepository:
             if exists:
                 return False
             from datetime import datetime as _dt
+
             await self._client.index(
                 index=self.TAGS_INDEX,
                 id=doc_id,

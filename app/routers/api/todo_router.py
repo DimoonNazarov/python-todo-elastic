@@ -20,13 +20,11 @@ from starlette.responses import HTMLResponse
 
 from app.core import get_async_uow_session, UnitOfWork
 from app.dependencies import get_todo_service
-from app.routers.dependencies import get_current_user, get_current_active_user
-from app.schemas import TodoSource, Todo, SUserInfo, UserRole
-from app.services.search_index import enrich_todo_display
+from app.routers.dependencies import get_current_active_user
+from app.schemas import TodoSource, SUserInfo, UserRole
 from app.services.todo import TodoService
-from app.utils import (
-    import_todos,
-)
+from app.utils import import_todos
+
 
 todo_router = APIRouter(prefix="/todo", tags=["Todo"])
 

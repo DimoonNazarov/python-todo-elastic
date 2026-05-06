@@ -17,12 +17,12 @@ from app.exceptions import (
 )
 from app.models import Todo as TodoORM, TodoEditHistory
 from app.schemas import SUserInfo, Tags, Todo as TodoSchema, TodoSource, UserRole
-from app.services.openrouter import OpenRouterService
-from app.services.search_index import build_search_document
-from app.services.search_index import enrich_todo_display_list
-from app.services.search_index import merge_search_hits_with_todos
 from app.services.clustering import cluster_todos
-from app.services.summary import build_spacy_summary
+from app.services import (
+    TodoClassificationService,
+    OpenRouterService,
+    build_spacy_summary,
+)
 from app.utils import (
     delete_image,
     generate_random_filename,
@@ -85,6 +85,7 @@ GENERATED_DETAILS = [
 class TodoService:
     def __init__(self, openrouter_service: OpenRouterService) -> None:
         self._openrouter_service = openrouter_service
+        self._classification = TodoClassificationService()
 
     @staticmethod
     def _build_todo_history_entry(
@@ -136,7 +137,9 @@ class TodoService:
     @staticmethod
     def _ensure_llm_source_text(details: str | None) -> str:
         if not details or not details.strip():
-            raise LLMRequestException("Для выполнения операции нужно заполнить описание заметки.")
+            raise LLMRequestException(
+                "Для выполнения операции нужно заполнить описание заметки."
+            )
         return details.strip()
 
     @staticmethod
@@ -229,8 +232,8 @@ class TodoService:
             random.choice(list(Tags)),
         )
 
-    @staticmethod
     async def _sync_todo_to_search_index(
+        self,
         uow_session: UnitOfWork,
         todo_id: int,
     ) -> None:
@@ -240,7 +243,7 @@ class TodoService:
         if not todo:
             return
 
-        document = build_search_document(todo)
+        document = self._classification.build_search_document(todo)
         await uow_session.elastic.ensure_index_exists()
         await uow_session.elastic.index_document(todo_id, document)
 
@@ -251,18 +254,20 @@ class TodoService:
             return None
         return datetime.strptime(date_str, "%Y-%m-%d")
 
-    @staticmethod
     async def _get_search_todos_from_hits(
+        self,
         uow_session: UnitOfWork,
         hits: list[dict],
     ) -> list[dict]:
-        todo_ids = [int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None]
+        todo_ids = [
+            int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None
+        ]
         if not todo_ids:
             return []
 
         async with uow_session.start():
             todos = await uow_session.todo.get_todos_by_ids(todo_ids)
-        return merge_search_hits_with_todos(hits, todos)
+        return self._classification.merge_search_hits_with_todos(hits, todos)
 
     async def create(
         self,
@@ -279,7 +284,6 @@ class TodoService:
         self._validate_details(details)
 
         async with uow_session.start():
-
             image_path = None
             image_hash = None
 
@@ -393,7 +397,7 @@ class TodoService:
                 date_from_dt.isoformat(),
                 limit=SEARCH_RESULTS_FETCH_LIMIT,
                 skip=0,
-                author_id=author_id
+                author_id=author_id,
             )
             found_todos = await self._get_search_todos_from_hits(
                 uow_session,
@@ -448,7 +452,6 @@ class TodoService:
         author_id = self._resolve_author_id(current_user)
 
         async with uow_session.start():
-
             count = await uow_session.todo.get_count_todos(
                 created_from=created_from,
                 created_to=created_to,
@@ -471,7 +474,7 @@ class TodoService:
                 author_id=author_id,
             )
 
-        return enrich_todo_display_list(todos), skip, pages
+        return self._classification.enrich_list(todos), skip, pages
 
     async def update(
         self,
@@ -594,7 +597,9 @@ class TodoService:
             if user.role != UserRole.ADMIN and todo.author_id != user.id:
                 raise ForbiddenException("Вы можете реферировать только свои задачи")
 
-            summary = await self._openrouter_service.generate_summary(todo.title, todo.details)
+            summary = await self._openrouter_service.generate_summary(
+                todo.title, todo.details
+            )
             summary = self._normalize_llm_text(summary)
             await uow_session.todo.update_llm_summary(
                 todo_id=todo_id,
