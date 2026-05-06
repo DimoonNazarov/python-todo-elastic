@@ -1,7 +1,6 @@
 from elasticsearch import AsyncElasticsearch, NotFoundError
 import logging
-from app.services.search_index import ALL_STOPWORDS
-from app.services.search_index import CLASSIFICATION_REPLACEMENTS
+from app.constants import ALL_STOPWORDS, CLASSIFICATION_REPLACEMENTS
 
 logger = logging.getLogger(__name__)
 
@@ -12,58 +11,9 @@ def create_russian_analyzer_mapping():
     return {
         "settings": {
             "analysis": {
-                "char_filter": {
-                    # Порядок важен: сначала более длинные выражения, потом короткие.
-                    "classification_osoboy_vazhnosti": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bособой\\s+важности\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS[
-                            "особой важности"
-                        ],
-                    },
-                    "classification_sovershenno_sekretno": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bсовершенно\\s+секретно\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS[
-                            "совершенно секретно"
-                        ],
-                    },
-                    "classification_dsp_full": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bдля\\s+служебного\\s+пользования\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS[
-                            "для служебного пользования"
-                        ],
-                    },
-                    "classification_konfidencialno": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bконфиденциально\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS[
-                            "конфиденциально"
-                        ],
-                    },
-                    "classification_dsp_short": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bдсп\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS["дсп"],
-                    },
-                    "classification_sekretno": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bсекретно\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS["секретно"],
-                    },
-                },
                 "analyzer": {
                     "russian_search_analyzer": {
                         "type": "custom",
-                        "char_filter": [
-                            "classification_osoboy_vazhnosti",
-                            "classification_sovershenno_sekretno",
-                            "classification_dsp_full",
-                            "classification_konfidencialno",
-                            "classification_dsp_short",
-                            "classification_sekretno",
-                        ],
                         "tokenizer": "standard",
                         "filter": [
                             "lowercase",
@@ -73,14 +23,6 @@ def create_russian_analyzer_mapping():
                     },
                     "russian_agg_analyzer": {
                         "type": "custom",
-                        "char_filter": [
-                            "classification_osoboy_vazhnosti",
-                            "classification_sovershenno_sekretno",
-                            "classification_dsp_full",
-                            "classification_konfidencialno",
-                            "classification_dsp_short",
-                            "classification_sekretno",
-                        ],
                         "tokenizer": "standard",
                         "filter": ["lowercase", "russian_stop_with_group_names"],
                     },
@@ -139,6 +81,7 @@ def create_russian_analyzer_mapping():
         },
     }
 
+
 class ElasticRepository:
     def __init__(self, client: AsyncElasticsearch):
         self._client = client
@@ -163,6 +106,8 @@ class ElasticRepository:
             logger.info("Deleted todo %s from index", todo_id)
         except NotFoundError:
             logger.warning("Todo %s not found in index on delete.", todo_id)
+        except Exception as e:
+            logger.error("Failed to delete todo %s from index: %s", todo_id, e)
 
     async def search_todos(
         self,
@@ -229,6 +174,7 @@ class ElasticRepository:
             must_clauses.append({"term": {"tag": tag}})
         if author_id is not None:
             must_clauses.append({"term": {"author_id": author_id}})
+
 
         # Убеждаемся, что индекс существует
         await self.ensure_index_exists()
@@ -331,7 +277,7 @@ class ElasticRepository:
         date_from: str,
         limit: int = 50,
         skip: int = 0,
-        author_id: int| None= None,
+        author_id: int | None = None,
     ) -> dict:
         """Возвращает все тудушки, созданные после указанной даты"""
         must_filters = [{"range": {"created_at": {"gte": date_from}}}]
@@ -561,16 +507,26 @@ class ElasticRepository:
                             "fields": {
                                 "suggest": {
                                     "type": "search_as_you_type",
-                                    "analyzer": "standard"
+                                    "analyzer": "standard",
                                 }
-                            }
+                            },
                         },
-                        "created_at": {"type": "date"}
+                        "created_at": {"type": "date"},
                     }
                 }
             }
             await self._client.indices.create(index=self.TAGS_INDEX, body=mapping)
             logger.info("Tags index created.")
+            from datetime import datetime as _dt
+
+            for name in ["Учёба", "Личное", "Планы"]:
+                await self._client.index(
+                    index=self.TAGS_INDEX,
+                    id=name.lower(),
+                    document={"name": name, "created_at": _dt.now().isoformat()},
+                )
+            # Принудительный refresh чтобы теги сразу были видны в поиске
+            await self._client.indices.refresh(index=self.TAGS_INDEX)
 
     async def get_all_tags(self) -> list[str]:
         """Возвращает все теги по алфавиту."""

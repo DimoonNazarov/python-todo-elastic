@@ -19,11 +19,10 @@ from app.exceptions import (
 from app.models import Todo as TodoORM, TodoEditHistory
 from app.schemas import SUserInfo, Tags, Todo as TodoSchema, TodoSource, UserRole
 from app.services.openrouter import OpenRouterService
-from app.services.search_index import build_search_document
-from app.services.search_index import enrich_todo_display_list
-from app.services.search_index import merge_search_hits_with_todos
+from app.services.search_index import TodoClassificationService
 from app.services.clustering import cluster_todos
 from app.services.summary import build_spacy_summary
+from app.constants import GENERATED_TITLES, GENERATED_DETAILS
 from app.utils import (
     delete_image,
     generate_random_filename,
@@ -36,56 +35,12 @@ from app.utils import (
 logger = logging.getLogger(__name__)
 TODO_DETAILS_MAX_LENGTH = 1000
 SEARCH_RESULTS_FETCH_LIMIT = 1000
-GENERATED_TITLES = [
-    "Купить продукты",
-    "Сделать домашнее задание",
-    "Позвонить маме",
-    "Почитать книгу",
-    "Сходить в спортзал",
-    "Приготовить ужин",
-    "Написать отчёт",
-    "Изучить Python",
-    "Посмотреть лекцию",
-    "Починить велосипед",
-    "Убраться в комнате",
-    "Оплатить счета",
-    "Записаться к врачу",
-    "Составить план на неделю",
-    "Полить цветы",
-    "Обновить резюме",
-    "Ответить на письма",
-    "Настроить Docker",
-    "Сделать бэкап данных",
-    "Пройти онлайн-курс",
-    "Написать тесты",
-    "Отрефакторить код",
-    "Прочитать документацию",
-    "Сходить на прогулку",
-    "Проверить почту",
-    "Сделать презентацию",
-    "Изучить Elasticsearch",
-    "Запустить миграции",
-    "Обновить зависимости",
-    "Написать README",
-]
-
-GENERATED_DETAILS = [
-    "Не забыть сделать это сегодня",
-    "Важная задача, требует внимания",
-    "Запланировано на эту неделю",
-    "Низкий приоритет, но нужно сделать",
-    "Срочно, дедлайн скоро",
-    "Обсудить с командой перед выполнением",
-    "Требует дополнительных ресурсов",
-    "Можно делегировать при необходимости",
-    "",
-    "",
-]
 
 
 class TodoService:
     def __init__(self, openrouter_service: OpenRouterService) -> None:
         self._openrouter_service = openrouter_service
+        self._classification = TodoClassificationService()
 
     @staticmethod
     def _build_todo_history_entry(
@@ -93,6 +48,7 @@ class TodoService:
         editor_id: int,
         action: str,
     ) -> TodoEditHistory:
+        """Создаёт запись в истории изменений задачи с фиксацией всех значимых полей."""
         edited_at = todo.updated_at or datetime.now(UTC)
         return TodoEditHistory(
             todo_id=todo.id,
@@ -112,36 +68,48 @@ class TodoService:
 
     @staticmethod
     def _can_view_only_own_todos(user: SUserInfo) -> bool:
+        """Проверяет, имеет ли пользователь роль VIEWER (может видеть только свои задачи)."""
         return user.role == UserRole.VIEWER
 
     @staticmethod
     def _can_delete_any_todo(user: SUserInfo) -> bool:
+        """Проверяет, имеет ли пользователь роль ADMIN (может удалять любые задачи)."""
         return user.role == UserRole.ADMIN
 
     @staticmethod
     def _resolve_author_id(user: SUserInfo) -> int | None:
+        """Возвращает ID пользователя для фильтрации по автору"""
         return user.id if user.role == UserRole.VIEWER else None
 
     @staticmethod
     def _normalize_llm_text(text: str, fallback: str | None = None) -> str:
+        """
+        Очищает текст от лишних кавычек и пробелов после LLM, возвращает
+        fallback при пустом результате.
+        """
         normalized = text.strip().strip("\"'«»")
         normalized = " ".join(normalized.split())
         return normalized or (fallback or "")
 
     @staticmethod
     def _normalize_details(details: str | None) -> str | None:
+        """Нормализует переносы строк в описании: заменяет CRLF и CR на LF."""
         if details is None:
             return None
         return details.replace("\r\n", "\n").replace("\r", "\n")
 
     @staticmethod
     def _ensure_llm_source_text(details: str | None) -> str:
+        """Проверяет, что описание не пустое, и возвращает его; иначе выбрасывает исключение для LLM-операций."""
         if not details or not details.strip():
-            raise LLMRequestException("Для выполнения операции нужно заполнить описание заметки.")
+            raise LLMRequestException(
+                "Для выполнения операции нужно заполнить описание заметки."
+            )
         return details.strip()
 
     @staticmethod
     def _validate_details(details: str | None) -> None:
+        """Проверяет, что длина описания не превышает максимально допустимую (TODO_DETAILS_MAX_LENGTH)."""
         if details is None:
             return
         if len(details) > TODO_DETAILS_MAX_LENGTH:
@@ -210,7 +178,7 @@ class TodoService:
                 data = await uow_session.todo.get_todo_by_image_path(existing_image)
                 if data is None:
                     raise NotFoundException(f"Image '{existing_image}' not found")
-                image_hash = data.image_hash
+                image_hash = data.image_hash<<<<<<< feat/rebuild-index-todo
             if (
                 await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id)
                 is None
@@ -230,6 +198,21 @@ class TodoService:
             random.choice(list(Tags)),
         )
 
+    async def _sync_todo_to_search_index(
+        self,
+        uow_session: UnitOfWork,
+        todo_id: int,
+    ) -> None:
+        async with uow_session.start():
+            todo = await uow_session.todo.get_todo_by_id(todo_id)
+
+        if not todo:
+            return
+
+        document = self._classification.build_search_document(todo)
+        await uow_session.elastic.ensure_index_exists()
+        await uow_session.elastic.index_document(todo_id, document)
+
     @staticmethod
     async def _index_todo_in_search(
         uow_session: UnitOfWork,
@@ -246,18 +229,20 @@ class TodoService:
             return None
         return datetime.strptime(date_str, "%Y-%m-%d")
 
-    @staticmethod
     async def _get_search_todos_from_hits(
+        self,
         uow_session: UnitOfWork,
         hits: list[dict],
     ) -> list[dict]:
-        todo_ids = [int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None]
+        todo_ids = [
+            int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None
+        ]
         if not todo_ids:
             return []
 
         async with uow_session.start():
             todos = await uow_session.todo.get_todos_by_ids(todo_ids)
-        return merge_search_hits_with_todos(hits, todos)
+        return self._classification.merge_search_hits_with_todos(hits, todos)
 
     async def create(
         self,
@@ -274,7 +259,6 @@ class TodoService:
         self._validate_details(details)
 
         async with uow_session.start():
-
             image_path = None
             image_hash = None
 
@@ -390,7 +374,7 @@ class TodoService:
                 date_from_dt.isoformat(),
                 limit=SEARCH_RESULTS_FETCH_LIMIT,
                 skip=0,
-                author_id=author_id
+                author_id=author_id,
             )
             found_todos = await self._get_search_todos_from_hits(
                 uow_session,
@@ -445,7 +429,6 @@ class TodoService:
         author_id = self._resolve_author_id(current_user)
 
         async with uow_session.start():
-
             count = await uow_session.todo.get_count_todos(
                 created_from=created_from,
                 created_to=created_to,
@@ -468,7 +451,7 @@ class TodoService:
                 author_id=author_id,
             )
 
-        return enrich_todo_display_list(todos), skip, pages
+        return self._classification.enrich_list(todos), skip, pages
 
     async def update(
         self,
@@ -597,7 +580,9 @@ class TodoService:
             if user.role != UserRole.ADMIN and todo.author_id != user.id:
                 raise ForbiddenException("Вы можете реферировать только свои задачи")
 
-            summary = await self._openrouter_service.generate_summary(todo.title, todo.details)
+            summary = await self._openrouter_service.generate_summary(
+                todo.title, todo.details
+            )
             summary = self._normalize_llm_text(summary)
             await uow_session.todo.update_llm_summary(
                 todo_id=todo_id,

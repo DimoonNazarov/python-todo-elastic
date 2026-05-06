@@ -23,11 +23,10 @@ from app.dependencies import get_todo_service
 from app.routers.dependencies import get_current_active_user
 from app.schemas import TodoSource, SUserInfo, UserRole
 from app.models import Todo as TodoORM
-from app.services.search_index import build_search_document, enrich_todo_display
+
 from app.services.todo import TodoService
-from app.utils import (
-    import_todos,
-)
+from app.utils import import_todos
+
 
 todo_router = APIRouter(prefix="/todo", tags=["Todo"])
 
@@ -487,7 +486,7 @@ async def get_todo(
     )
 
     logger.info("Getting todo: %s", todo)
-    todo = enrich_todo_display(todo)
+    todo = todo_service._classification.enrich(todo)
 
     tags = await uow_session.elastic.get_all_tags()
     return templates.TemplateResponse(
