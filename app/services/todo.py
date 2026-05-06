@@ -178,7 +178,7 @@ class TodoService:
                 data = await uow_session.todo.get_todo_by_image_path(existing_image)
                 if data is None:
                     raise NotFoundException(f"Image '{existing_image}' not found")
-                image_hash = data.image_hash<<<<<<< feat/rebuild-index-todo
+                image_hash = data.image_hash
             if (
                 await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id)
                 is None
@@ -198,27 +198,12 @@ class TodoService:
             random.choice(list(Tags)),
         )
 
-    async def _sync_todo_to_search_index(
-        self,
-        uow_session: UnitOfWork,
-        todo_id: int,
-    ) -> None:
-        async with uow_session.start():
-            todo = await uow_session.todo.get_todo_by_id(todo_id)
-
-        if not todo:
-            return
-
-        document = self._classification.build_search_document(todo)
-        await uow_session.elastic.ensure_index_exists()
-        await uow_session.elastic.index_document(todo_id, document)
-
-    @staticmethod
     async def _index_todo_in_search(
+        self,
         uow_session: UnitOfWork,
         todo: TodoORM,
     ) -> None:
-        document = build_search_document(todo)
+        document = self._classification.build_search_document(todo)
         await uow_session.elastic.ensure_index_exists()
         await uow_session.elastic.index_document(todo.id, document)
 
@@ -497,7 +482,7 @@ class TodoService:
             if not has_changes:
                 return todo
 
-            previous_document = build_search_document(todo)
+            previous_document = self._classification.build_search_document(todo)
             todo_change = TodoSchema(
                 title=title,
                 details=details,
@@ -696,7 +681,7 @@ class TodoService:
                 raise ForbiddenException("Вы можете удалять только свои задачи")
 
             logger.info("Deleting todo: %s", todo)
-            deleted_document = build_search_document(todo)
+            deleted_document = self._classification.build_search_document(todo)
             if (
                 await uow_session.todo.get_todos_by_image_path(
                     image_path=todo.image_path,
@@ -767,7 +752,7 @@ class TodoService:
                 await delete_image(image_path)
 
             deleted_documents = {
-                todo.id: build_search_document(todo)
+                todo.id: self._classification.build_search_document(todo)
                 for todo in todos
             }
             await uow_session.todo.delete_by_ids(todo_ids)
@@ -809,7 +794,7 @@ class TodoService:
 
             todo_ids = [todo.id for todo in user_todos]
             deleted_documents = {
-                todo.id: build_search_document(todo)
+                todo.id: self._classification.build_search_document(todo)
                 for todo in user_todos
             }
 
