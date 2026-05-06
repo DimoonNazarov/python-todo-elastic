@@ -42,6 +42,7 @@ def export_todos(todos: list, file_path: str = "data/todos.xlsx"):
         "image_path",
         "image_hash",
         "details_hash",
+        "file_path",
     ]
     for index, header in enumerate(headers):
         ws.column_dimensions[f"{chr(index + 65)}"].width = len(header) + 5
@@ -70,6 +71,7 @@ def export_todos(todos: list, file_path: str = "data/todos.xlsx"):
                 todo.image_path,
                 todo.image_hash,
                 todo.details_hash,
+                todo.file_path,
             ]
         )
 
@@ -85,10 +87,10 @@ def export_todos(todos: list, file_path: str = "data/todos.xlsx"):
 def import_todos(file_path) -> list[dict]:
     """Читает Excel-файл и возвращает список словарей с данными задач.
 
-    Ожидается 15 колонок:
+    Ожидается 15 или 16 колонок:
     title, details, completed, tag, created_at, completed_at, due_at,
     updated_at, updated_by, source, spacy_summary, llm_summary,
-    image_path, image_hash, details_hash
+    image_path, image_hash, details_hash[, file_path]
     """
     workbook = openpyxl.load_workbook(file_path)
     sheet = workbook.active
@@ -108,23 +110,20 @@ def import_todos(file_path) -> list[dict]:
         return val if isinstance(val, datetime) else None
 
     for row in sheet.iter_rows(min_row=2, values_only=True):
-        (
-            title,
-            details,
-            completed,
-            tag,
-            created_at,
-            completed_at,
-            due_at,
-            updated_at,
-            updated_by,
-            source,
-            spacy_summary,
-            llm_summary,
-            image_path,
-            image_hash,
-            details_hash,
-        ) = row
+        row = tuple(row)
+        if len(row) >= 16:
+            (
+                title, details, completed, tag, created_at, completed_at,
+                due_at, updated_at, updated_by, source, spacy_summary,
+                llm_summary, image_path, image_hash, details_hash, todo_file_path,
+            ) = row[:16]
+        else:
+            (
+                title, details, completed, tag, created_at, completed_at,
+                due_at, updated_at, updated_by, source, spacy_summary,
+                llm_summary, image_path, image_hash, details_hash,
+            ) = row[:15]
+            todo_file_path = None
 
         is_completed = completed == "Выполнено"
 
@@ -149,6 +148,7 @@ def import_todos(file_path) -> list[dict]:
                 "image_path": image_path,
                 "image_hash": image_hash,
                 "details_hash": details_hash,
+                "file_path": todo_file_path,
             }
         )
 

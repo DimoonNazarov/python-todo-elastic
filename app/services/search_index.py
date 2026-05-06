@@ -262,7 +262,7 @@ def build_masked_fields(title: str, details: str | None) -> dict[str, Any]:
     }
 
 
-def build_search_document(todo: Any) -> dict[str, Any]:
+def build_search_document(todo: Any, file_content: str = "") -> dict[str, Any]:
     """
     Преобразует объект задачи в документ для индексации в Elasticsearch.
 
@@ -270,7 +270,7 @@ def build_search_document(todo: Any) -> dict[str, Any]:
     для секретного контента и преобразует даты в ISO-формат.
     """
     masked = build_masked_fields(_get_value(todo, "title"), _get_value(todo, "details"))
-    return {
+    doc = {
         "todo_id": _get_value(todo, "id"),
         "author_id": _get_value(todo, "author_id"),
         "title": _get_value(todo, "title"),
@@ -284,7 +284,9 @@ def build_search_document(todo: Any) -> dict[str, Any]:
         "classification_level": masked["classification_level"],
         "masked_title": masked["masked_title"],
         "masked_details": masked["masked_details"],
+        "file_content": file_content,
     }
+    return doc
 
 
 def enrich_todo_display(item: Any) -> Any:
@@ -363,6 +365,7 @@ def merge_search_hits_with_todos(
             "updated_at": _get_value(todo, "updated_at"),
             "updated_by": _get_value(todo, "updated_by"),
             "image_path": _get_value(todo, "image_path"),
+            "file_path": _get_value(todo, "file_path"),
             "_score": hit.get("_score"),
             "_id": hit.get("_id"),
             "highlight": hit.get("highlight"),

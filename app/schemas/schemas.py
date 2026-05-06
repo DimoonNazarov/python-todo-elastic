@@ -29,6 +29,7 @@ class Todo(BaseModel):
     details_hash: str | None = Field(default=None)
     spacy_summary: str | None = Field(default=None)
     llm_summary: str | None = Field(default=None)
+    file_path: str | None = Field(default=None)
 
     model_config = {
         "json_schema_extra": {

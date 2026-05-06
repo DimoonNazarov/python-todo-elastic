@@ -200,6 +200,20 @@
         </select>
     </div>
 
+    <div class="form-group mt-2">
+        <label for="attached_file">Прикрепить документ (.xlsx, .docx, .txt, .pdf):</label>
+        <input type="file" class="form-control" id="attached_file" name="attached_file" accept=".xlsx,.docx,.txt,.pdf">
+        {% if todo.file_path %}
+        <div class="mt-2">
+            <a href="{{ url_for('files', path=todo.file_path) }}" target="_blank" class="btn btn-outline-primary btn-sm">Скачать прикреплённый файл ({{ todo.file_path }})</a>
+        </div>
+        <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" id="remove_file" name="remove_file" value="true">
+            <label class="form-check-label" for="remove_file">Удалить прикреплённый файл</label>
+        </div>
+        {% endif %}
+    </div>
+
     <button type="submit" class="btn btn-success" data-todo-image="{{ todo.image_path }}">Сохранить</button>
 </form>
 

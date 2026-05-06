@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
     es = get_es_client()
     repo = ElasticRepository(es)
     await repo.ensure_index_exists()
+    await repo.ensure_file_content_field()
     yield
     # При остановке
     from app.core.database import close_es_client
@@ -72,6 +73,7 @@ create_dirs()
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.mount("/images", StaticFiles(directory="images"), name="images")
+app.mount("/files", StaticFiles(directory="files"), name="files")
 
 
 app.add_exception_handler(NotFoundException, not_found_handler)
