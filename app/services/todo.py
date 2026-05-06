@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from fastapi import UploadFile
 
+from app.constants import GENERATED_TITLES, GENERATED_DETAILS
 from app.core import UnitOfWork
 from app.exceptions import (
     ForbiddenException,
@@ -18,11 +19,10 @@ from app.exceptions import (
 from app.models import Todo as TodoORM, TodoEditHistory
 from app.schemas import SUserInfo, Tags, Todo as TodoSchema, TodoSource, UserRole
 from app.services.clustering import cluster_todos
-from app.services import (
-    TodoClassificationService,
-    OpenRouterService,
-    build_spacy_summary,
-)
+from app.services.search_index import TodoClassificationService
+from app.services.openrouter import OpenRouterService
+from app.services.summary import build_spacy_summary
+
 from app.utils import (
     delete_image,
     generate_random_filename,
@@ -35,51 +35,6 @@ from app.utils import (
 logger = logging.getLogger(__name__)
 TODO_DETAILS_MAX_LENGTH = 1000
 SEARCH_RESULTS_FETCH_LIMIT = 1000
-GENERATED_TITLES = [
-    "Купить продукты",
-    "Сделать домашнее задание",
-    "Позвонить маме",
-    "Почитать книгу",
-    "Сходить в спортзал",
-    "Приготовить ужин",
-    "Написать отчёт",
-    "Изучить Python",
-    "Посмотреть лекцию",
-    "Починить велосипед",
-    "Убраться в комнате",
-    "Оплатить счета",
-    "Записаться к врачу",
-    "Составить план на неделю",
-    "Полить цветы",
-    "Обновить резюме",
-    "Ответить на письма",
-    "Настроить Docker",
-    "Сделать бэкап данных",
-    "Пройти онлайн-курс",
-    "Написать тесты",
-    "Отрефакторить код",
-    "Прочитать документацию",
-    "Сходить на прогулку",
-    "Проверить почту",
-    "Сделать презентацию",
-    "Изучить Elasticsearch",
-    "Запустить миграции",
-    "Обновить зависимости",
-    "Написать README",
-]
-
-GENERATED_DETAILS = [
-    "Не забыть сделать это сегодня",
-    "Важная задача, требует внимания",
-    "Запланировано на эту неделю",
-    "Низкий приоритет, но нужно сделать",
-    "Срочно, дедлайн скоро",
-    "Обсудить с командой перед выполнением",
-    "Требует дополнительных ресурсов",
-    "Можно делегировать при необходимости",
-    "",
-    "",
-]
 
 
 class TodoService:
@@ -93,6 +48,7 @@ class TodoService:
         editor_id: int,
         action: str,
     ) -> TodoEditHistory:
+        """Создаёт запись в истории изменений задачи с фиксацией всех значимых полей."""
         edited_at = todo.updated_at or datetime.now(UTC)
         return TodoEditHistory(
             todo_id=todo.id,
@@ -112,30 +68,39 @@ class TodoService:
 
     @staticmethod
     def _can_view_only_own_todos(user: SUserInfo) -> bool:
+        """Проверяет, имеет ли пользователь роль VIEWER (может видеть только свои задачи)."""
         return user.role == UserRole.VIEWER
 
     @staticmethod
     def _can_delete_any_todo(user: SUserInfo) -> bool:
+        """Проверяет, имеет ли пользователь роль ADMIN (может удалять любые задачи)."""
         return user.role == UserRole.ADMIN
 
     @staticmethod
     def _resolve_author_id(user: SUserInfo) -> int | None:
+        """Возвращает ID пользователя для фильтрации по автору"""
         return user.id if user.role == UserRole.VIEWER else None
 
     @staticmethod
     def _normalize_llm_text(text: str, fallback: str | None = None) -> str:
+        """
+        Очищает текст от лишних кавычек и пробелов после LLM, возвращает
+        fallback при пустом результате.
+        """
         normalized = text.strip().strip("\"'«»")
         normalized = " ".join(normalized.split())
         return normalized or (fallback or "")
 
     @staticmethod
     def _normalize_details(details: str | None) -> str | None:
+        """Нормализует переносы строк в описании: заменяет CRLF и CR на LF."""
         if details is None:
             return None
         return details.replace("\r\n", "\n").replace("\r", "\n")
 
     @staticmethod
     def _ensure_llm_source_text(details: str | None) -> str:
+        """Проверяет, что описание не пустое, и возвращает его; иначе выбрасывает исключение для LLM-операций."""
         if not details or not details.strip():
             raise LLMRequestException(
                 "Для выполнения операции нужно заполнить описание заметки."
@@ -144,6 +109,7 @@ class TodoService:
 
     @staticmethod
     def _validate_details(details: str | None) -> None:
+        """Проверяет, что длина описания не превышает максимально допустимую (TODO_DETAILS_MAX_LENGTH)."""
         if details is None:
             return
         if len(details) > TODO_DETAILS_MAX_LENGTH:

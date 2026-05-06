@@ -484,7 +484,7 @@ async def get_todo(
     )
 
     logger.info("Getting todo: %s", todo)
-    todo = enrich_todo_display(todo)
+    todo = todo_service._classification.enrich(todo)
 
     tags = await uow_session.elastic.get_all_tags()
     return templates.TemplateResponse(
