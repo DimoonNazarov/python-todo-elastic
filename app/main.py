@@ -18,6 +18,7 @@ from app.exceptions import (
     LLMConfigurationException,
     LLMRequestException,
     LLMServiceException,
+    SearchSyncException,
 )
 from app.repository.elastic_repository import ElasticRepository
 from app.routers import (
@@ -34,6 +35,7 @@ from app.routers.exception_handlers import (
     llm_configuration_handler,
     llm_request_handler,
     llm_service_handler,
+    search_sync_handler,
     forbidden_handler,
 )
 from app.utils import create_dirs
@@ -82,3 +84,4 @@ app.add_exception_handler(InactiveUserException, inactive_user_handler)
 app.add_exception_handler(LLMConfigurationException, llm_configuration_handler)
 app.add_exception_handler(LLMRequestException, llm_request_handler)
 app.add_exception_handler(LLMServiceException, llm_service_handler)
+app.add_exception_handler(SearchSyncException, search_sync_handler)

@@ -1,0 +1,103 @@
+services:
+  es01:
+    image: elasticsearch:9.3.0
+    container_name: es01
+    environment:
+      - node.name=es01
+      - cluster.name=todo-cluster
+      - cluster.initial_master_nodes=es01,es02,es03
+      - discovery.seed_hosts=es02,es03
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata01:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - elastic
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cat/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+
+  es02:
+    image: elasticsearch:9.3.0
+    container_name: es02
+    environment:
+      - node.name=es02
+      - cluster.name=todo-cluster
+      - cluster.initial_master_nodes=es01,es02,es03
+      - discovery.seed_hosts=es01,es03
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata02:/usr/share/elasticsearch/data
+    ports:
+      - "9201:9200"
+    networks:
+      - elastic
+    restart: unless-stopped
+
+  es03:
+    image: elasticsearch:9.3.0
+    container_name: es03
+    environment:
+      - node.name=es03
+      - cluster.name=todo-cluster
+      - cluster.initial_master_nodes=es01,es02,es03
+      - discovery.seed_hosts=es01,es02
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata03:/usr/share/elasticsearch/data
+    ports:
+      - "9202:9200"
+    networks:
+      - elastic
+    restart: unless-stopped
+
+  kibana:
+    image: kibana:9.3.0
+    container_name: kibana-cluster
+    environment:
+      - ELASTICSEARCH_HOSTS=http://es01:9200
+      - XPACK_SECURITY_ENABLED=false
+      - ELASTICSEARCH_SSL_VERIFICATION_MODE=none
+    ports:
+      - "5601:5601"
+    networks:
+      - elastic
+    depends_on:
+      es01:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  elastic:
+    driver: bridge
+
+volumes:
+  esdata01:
+  esdata02:
+  esdata03:
