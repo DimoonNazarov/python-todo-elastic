@@ -11,54 +11,9 @@ def create_russian_analyzer_mapping():
     return {
         "settings": {
             "analysis": {
-                "char_filter": {
-                    # Порядок важен: сначала более длинные выражения, потом короткие.
-                    "classification_osoboy_vazhnosti": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bособой\\s+важности\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS["особой важности"],
-                    },
-                    "classification_sovershenno_sekretno": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bсовершенно\\s+секретно\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS[
-                            "совершенно секретно"
-                        ],
-                    },
-                    "classification_dsp_full": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bдля\\s+служебного\\s+пользования\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS[
-                            "для служебного пользования"
-                        ],
-                    },
-                    "classification_konfidencialno": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bконфиденциально\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS["конфиденциально"],
-                    },
-                    "classification_dsp_short": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bдсп\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS["дсп"],
-                    },
-                    "classification_sekretno": {
-                        "type": "pattern_replace",
-                        "pattern": "(?iu)\\bсекретно\\b",
-                        "replacement": CLASSIFICATION_REPLACEMENTS["секретно"],
-                    },
-                },
                 "analyzer": {
                     "russian_search_analyzer": {
                         "type": "custom",
-                        "char_filter": [
-                            "classification_osoboy_vazhnosti",
-                            "classification_sovershenno_sekretno",
-                            "classification_dsp_full",
-                            "classification_konfidencialno",
-                            "classification_dsp_short",
-                            "classification_sekretno",
-                        ],
                         "tokenizer": "standard",
                         "filter": [
                             "lowercase",
@@ -68,14 +23,6 @@ def create_russian_analyzer_mapping():
                     },
                     "russian_agg_analyzer": {
                         "type": "custom",
-                        "char_filter": [
-                            "classification_osoboy_vazhnosti",
-                            "classification_sovershenno_sekretno",
-                            "classification_dsp_full",
-                            "classification_konfidencialno",
-                            "classification_dsp_short",
-                            "classification_sekretno",
-                        ],
                         "tokenizer": "standard",
                         "filter": ["lowercase", "russian_stop_with_group_names"],
                     },
