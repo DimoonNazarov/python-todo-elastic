@@ -685,6 +685,7 @@ async def export_page(request: Request):
 async def import_file(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
+    todo_service: Annotated[TodoService, Depends(get_todo_service)],
     file: UploadFile = File(...),
 ):
     file_location = os.path.join("./files/", file.filename)
@@ -716,7 +717,7 @@ async def import_file(
             await uow_session.todo.add(todo)
             await uow_session.flush()
 
-            document = build_search_document(todo)
+            document = todo_service._classification.build_search_document(todo)
             await uow_session.elastic.ensure_index_exists()
             await uow_session.elastic.index_document(todo.id, document)
             uow_session.add_compensation(uow_session.elastic.delete_todo, todo.id)
