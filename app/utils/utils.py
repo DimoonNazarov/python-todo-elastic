@@ -18,11 +18,10 @@ from fastapi import HTTPException
 from fastapi import status
 from loguru import logger
 
-from app.models import Todo
 from app.schemas import TodoSource
 
 
-def export_todos(todos: list[Todo], file_path: str = "data/todos.xlsx"):
+def export_todos(todos: list, file_path: str = "data/todos.xlsx"):
     wb = Workbook()
     wb.remove(wb.active)
     ws = wb.create_sheet("todos", 0)
@@ -39,8 +38,10 @@ def export_todos(todos: list[Todo], file_path: str = "data/todos.xlsx"):
         "updated_by",
         "source",
         "spacy_summary",
+        "llm_summary",
         "image_path",
         "image_hash",
+        "details_hash",
     ]
     for index, header in enumerate(headers):
         ws.column_dimensions[f"{chr(index + 65)}"].width = len(header) + 5
@@ -65,8 +66,10 @@ def export_todos(todos: list[Todo], file_path: str = "data/todos.xlsx"):
                 todo.updated_by,
                 todo.source,
                 todo.spacy_summary,
+                todo.llm_summary,
                 todo.image_path,
                 todo.image_hash,
+                todo.details_hash,
             ]
         )
 
@@ -79,7 +82,14 @@ def export_todos(todos: list[Todo], file_path: str = "data/todos.xlsx"):
     wb.save(file_path)
 
 
-def import_todos(file_path) -> list[Todo]:
+def import_todos(file_path) -> list[dict]:
+    """Читает Excel-файл и возвращает список словарей с данными задач.
+
+    Ожидается 15 колонок:
+    title, details, completed, tag, created_at, completed_at, due_at,
+    updated_at, updated_by, source, spacy_summary, llm_summary,
+    image_path, image_hash, details_hash
+    """
     workbook = openpyxl.load_workbook(file_path)
     sheet = workbook.active
 
@@ -94,6 +104,9 @@ def import_todos(file_path) -> list[Todo]:
     if column_index:
         sheet.column_dimensions[column_index].hidden = False
 
+    def parse_dt(val):
+        return val if isinstance(val, datetime) else None
+
     for row in sheet.iter_rows(min_row=2, values_only=True):
         (
             title,
@@ -102,29 +115,42 @@ def import_todos(file_path) -> list[Todo]:
             tag,
             created_at,
             completed_at,
+            due_at,
+            updated_at,
+            updated_by,
             source,
+            spacy_summary,
+            llm_summary,
             image_path,
             image_hash,
+            details_hash,
         ) = row
 
-        if not completed and completed_at is not None:
-            print(f"Ошибка: Задача с ID {id} не завершена, но дата выполнения указана.")
+        is_completed = completed == "Выполнено"
+
+        if not is_completed and completed_at is not None:
+            logger.warning("Задача '%s' не завершена, но дата выполнения указана — пропуск.", title)
             continue
 
-        created_at = created_at if isinstance(created_at, datetime) else None
-        completed_at = completed_at if isinstance(completed_at, datetime) else None
-
-        todo = Todo()
-        todo.title = title
-        todo.details = details if details is not None else ""
-        todo.completed = True if completed == "Выполнено" else False
-        todo.tag = tag
-        todo.created_at = created_at
-        todo.completed_at = completed_at
-        todo.source = TodoSource.imported
-        todo.image_path = image_path
-        todo.image_hash = image_hash
-        todos.append(todo)
+        todos.append(
+            {
+                "title": title,
+                "details": details if details is not None else "",
+                "completed": is_completed,
+                "tag": tag,
+                "created_at": parse_dt(created_at),
+                "completed_at": parse_dt(completed_at),
+                "due_at": parse_dt(due_at),
+                "updated_at": parse_dt(updated_at),
+                "updated_by": updated_by,
+                "source": TodoSource.imported,
+                "spacy_summary": spacy_summary,
+                "llm_summary": llm_summary,
+                "image_path": image_path,
+                "image_hash": image_hash,
+                "details_hash": details_hash,
+            }
+        )
 
     workbook.close()
 
@@ -185,6 +211,9 @@ def create_dirs():
 
     if not os.path.exists("images"):
         os.mkdir("images")
+
+    if not os.path.exists("files"):
+        os.mkdir("files")
 
 
 class OAuth2PasswordBearerWithCookie(OAuth2):

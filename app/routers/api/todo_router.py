@@ -22,7 +22,8 @@ from app.core import get_async_uow_session, UnitOfWork
 from app.dependencies import get_todo_service
 from app.routers.dependencies import get_current_active_user
 from app.schemas import TodoSource, SUserInfo, UserRole
-from app.services.search_index import enrich_todo_display
+from app.models import Todo as TodoORM
+from app.services.search_index import build_search_document, enrich_todo_display
 from app.services.todo import TodoService
 from app.utils import (
     import_todos,
@@ -680,24 +681,48 @@ async def export_page(request: Request):
 
 @todo_router.post(
     "/import",
-    response_class=RedirectResponse,
-    status_code=status.HTTP_303_SEE_OTHER,
-    dependencies=[Depends(get_current_active_user)],
+    status_code=status.HTTP_201_CREATED,
 )
 async def import_file(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
+    current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
     file: UploadFile = File(...),
 ):
     file_location = os.path.join("./files/", file.filename)
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    todos = import_todos(file_location)
+    todo_dicts = import_todos(file_location)
 
-    for todo in todos:
-        await uow_session.todo.add(todo)
+    async with uow_session.start():
+        for data in todo_dicts:
+            todo = TodoORM(
+                title=data["title"],
+                details=data["details"],
+                completed=data["completed"],
+                tag=data["tag"],
+                created_at=data["created_at"],
+                completed_at=data["completed_at"],
+                due_at=data["due_at"],
+                updated_at=data["updated_at"],
+                updated_by=data["updated_by"],
+                source=data["source"],
+                spacy_summary=data["spacy_summary"],
+                llm_summary=data["llm_summary"],
+                image_path=data["image_path"],
+                image_hash=data["image_hash"],
+                details_hash=data["details_hash"],
+                author_id=current_user.id,
+            )
+            await uow_session.todo.add(todo)
+            await uow_session.flush()
 
-    return RedirectResponse("/todo/home", status_code=status.HTTP_303_SEE_OTHER)
+            document = build_search_document(todo)
+            await uow_session.elastic.ensure_index_exists()
+            await uow_session.elastic.index_document(todo.id, document)
+            uow_session.add_compensation(uow_session.elastic.delete_todo, todo.id)
+
+    return {"status": "success", "details": f"Imported {len(todo_dicts)} todos"}
 
 
 @todo_router.get("/import-log", response_class=HTMLResponse)
