@@ -106,9 +106,7 @@ class TodoService:
     def _ensure_llm_source_text(details: str | None) -> str:
         """Проверяет, что описание не пустое, и возвращает его; иначе выбрасывает исключение для LLM-операций."""
         if not details or not details.strip():
-            raise LLMRequestException(
-                "Для выполнения операции нужно заполнить описание заметки."
-            )
+            raise LLMRequestException("Для выполнения операции нужно заполнить описание заметки.")
         return details.strip()
 
     @staticmethod
@@ -117,9 +115,7 @@ class TodoService:
         if details is None:
             return
         if len(details) > TODO_DETAILS_MAX_LENGTH:
-            raise InvalidTodoDataException(
-                "Описание заметки не может превышать 1000 символов."
-            )
+            raise InvalidTodoDataException("Описание заметки не может превышать 1000 символов.")
 
     @staticmethod
     def _build_cluster_context(cluster_todos_data: Sequence[TodoORM]) -> str:
@@ -133,20 +129,19 @@ class TodoService:
             )
         return "\n".join(lines) if lines else "Похожих заметок в кластере не найдено."
 
+    @staticmethod
     def _get_cluster_for_draft(
-        self,
         todos: Sequence[TodoORM],
         title: str | None,
         details: str,
     ) -> list[TodoORM]:
+        """Находит кластер для черновика задачи"""
         draft = SimpleNamespace(id=-1, title=title or "", details=details)
         clusters = cluster_todos([*todos, draft], n_clusters=3)
         for cluster in clusters:
             cluster_items = cluster["todos"]
             if any(getattr(item, "id", None) == -1 for item in cluster_items):
-                return [
-                    item for item in cluster_items if getattr(item, "id", None) != -1
-                ]
+                return [item for item in cluster_items if getattr(item, "id", None) != -1]
         return list(todos[:5])
 
     @staticmethod
@@ -161,17 +156,12 @@ class TodoService:
         if image and image.filename:
             image_hash = await hash_image(image)
             duplicate = await uow_session.todo.is_duplicate_image(image_hash)
-            if (
-                await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id)
-                is None
-            ):
+            if await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id) is None:
                 await delete_image(todo.image_path)
             if duplicate:
                 logger.info("Duplicate image detected.")
                 return duplicate.image_path, image_hash
-            random_filename = (
-                generate_random_filename() + "." + image.filename.split(".")[-1]
-            )
+            random_filename = generate_random_filename() + "." + image.filename.split(".")[-1]
             await load_image(image, random_filename)
             return random_filename, image_hash
 
@@ -183,10 +173,7 @@ class TodoService:
                 if data is None:
                     raise NotFoundException(f"Image '{existing_image}' not found")
                 image_hash = data.image_hash
-            if (
-                await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id)
-                is None
-            ):
+            if await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id) is None:
                 await delete_image(todo.image_path)
             return existing_image, image_hash
 
@@ -194,6 +181,7 @@ class TodoService:
 
     @staticmethod
     def _build_random_todo_payload() -> tuple[str, str, Tags]:
+        """Генерирует случайные данные для todo"""
         title = random.choice(GENERATED_TITLES)
         suffix = random.randint(1, 9999)
         return (
@@ -265,9 +253,8 @@ class TodoService:
         uow_session: UnitOfWork,
         hits: list[dict],
     ) -> list[dict]:
-        todo_ids = [
-            int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None
-        ]
+        """Получает todo-объекты по результатам поиска Elasticsearch"""
+        todo_ids = [int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None]
         if not todo_ids:
             return []
 
@@ -287,6 +274,7 @@ class TodoService:
         due_at: datetime | None = None,
         file: UploadFile | None = None,
     ) -> None:
+        """Создаёт новую задачу."""
         details = self._normalize_details(details)
         self._validate_details(details)
 
@@ -301,9 +289,7 @@ class TodoService:
                 if duplicate:
                     image_path = duplicate.image_path
                 else:
-                    filename = (
-                        generate_random_filename() + "." + image.filename.split(".")[-1]
-                    )
+                    filename = generate_random_filename() + "." + image.filename.split(".")[-1]
                     await load_image(image, filename)
                     image_path = filename
 
@@ -346,6 +332,7 @@ class TodoService:
         search_tag: str | None,
         search_date_from: str | None,
     ) -> dict:
+        """Возвращает страницу задач с поддержкой поиска и фильтрации."""
         author_id = self._resolve_author_id(current_user)
 
         if query:
@@ -427,8 +414,7 @@ class TodoService:
                 "pages": pages,
                 "total": total,
                 "search_mode": "date",
-                "subtitle": "Результаты поиска после %s"
-                % date_from_dt.strftime("%d.%m.%Y %H:%M"),
+                "subtitle": "Результаты поиска после %s" % date_from_dt.strftime("%d.%m.%Y %H:%M"),
             }
 
         todos, skip, pages = await self.get_todos(
@@ -460,6 +446,7 @@ class TodoService:
         created_to: str | None,
         tag: str | None,
     ) -> tuple[Sequence[TodoORM], int, int]:
+        """Получает список задач с пагинацией и фильтрами."""
         created_from = self._parse_data(created_from)
         created_to = self._parse_data(created_to)
         author_id = self._resolve_author_id(current_user)
@@ -474,9 +461,7 @@ class TodoService:
             pages = math.ceil(count / limit) if count else 1
 
             if skip > pages:
-                raise InvalidPageException(
-                    f"Page {skip} does not exist, total pages: {pages}"
-                )
+                raise InvalidPageException(f"Page {skip} does not exist, total pages: {pages}")
 
             todos = await uow_session.todo.get_many(
                 limit=limit,
@@ -576,9 +561,7 @@ class TodoService:
                 user_id=user.id,
             )
             updated_todo = await uow_session.todo.get_todo_by_id(todo_id)
-            await uow_session.todo.add_edit_history(
-                self._build_todo_history_entry(updated_todo, user.id, "edit")
-            )
+            await uow_session.todo.add_edit_history(self._build_todo_history_entry(updated_todo, user.id, "edit"))
 
             file_content = self._extract_file_content(resolved_file_path)
             try:
@@ -633,9 +616,7 @@ class TodoService:
             if user.role != UserRole.ADMIN and todo.author_id != user.id:
                 raise ForbiddenException("Вы можете реферировать только свои задачи")
 
-            summary = await self._openrouter_service.generate_summary(
-                todo.title, todo.details
-            )
+            summary = await self._openrouter_service.generate_summary(todo.title, todo.details)
             summary = self._normalize_llm_text(summary)
             await uow_session.todo.update_llm_summary(
                 todo_id=todo_id,
@@ -735,17 +716,13 @@ class TodoService:
 
         return todo, images
 
-    async def delete(
-        self, uow_session: UnitOfWork, todo_id: int, current_user: SUserInfo
-    ) -> TodoORM:
+    async def delete(self, uow_session: UnitOfWork, todo_id: int, current_user: SUserInfo) -> TodoORM:
         """Удаление todo с проверкой владельца."""
         async with uow_session.start():
             todo = await uow_session.todo.get_todo_by_id(todo_id=todo_id)
             if not todo:
                 raise NotFoundException(f"Todo with id {todo_id} not found")
-            if todo.author_id != current_user.id and not self._can_delete_any_todo(
-                current_user
-            ):
+            if todo.author_id != current_user.id and not self._can_delete_any_todo(current_user):
                 raise ForbiddenException("Вы можете удалять только свои задачи")
 
             logger.info("Deleting todo: %s", todo)
@@ -789,9 +766,7 @@ class TodoService:
                 author_id=author_id,
             )
 
-    async def delete_multiple(
-        self, uow_session: UnitOfWork, todo_ids: list[int], current_user: SUserInfo
-    ) -> None:
+    async def delete_multiple(self, uow_session: UnitOfWork, todo_ids: list[int], current_user: SUserInfo) -> None:
         """Удаление нескольких todo по списку идентификаторов с проверкой прав владельца."""
         async with uow_session.start():
             todos = await uow_session.todo.get_todos_by_ids(todo_ids=todo_ids)
@@ -800,9 +775,7 @@ class TodoService:
 
             # Проверка прав: только владелец или админ может удалять
             if not self._can_delete_any_todo(current_user):
-                not_owned_ids = [
-                    todo.id for todo in todos if todo.author_id != current_user.id
-                ]
+                not_owned_ids = [todo.id for todo in todos if todo.author_id != current_user.id]
                 if not_owned_ids:
                     raise ForbiddenException("Вы можете удалять только свои задачи")
 
@@ -810,9 +783,7 @@ class TodoService:
             for todo in todos:
                 if (
                     todo.image_path
-                    and await uow_session.todo.get_todos_by_image_path(
-                        image_path=todo.image_path, todo_id=todo.id
-                    )
+                    and await uow_session.todo.get_todos_by_image_path(image_path=todo.image_path, todo_id=todo.id)
                     is None
                 ):
                     image_paths_to_delete.append(todo.image_path)
@@ -823,10 +794,7 @@ class TodoService:
             for todo in todos:
                 self._delete_file(todo.file_path)
 
-            deleted_documents = {
-                todo.id: self._classification.build_search_document(todo)
-                for todo in todos
-            }
+            deleted_documents = {todo.id: self._classification.build_search_document(todo) for todo in todos}
             await uow_session.todo.delete_by_ids(todo_ids)
 
             for todo_id in todo_ids:
@@ -840,9 +808,7 @@ class TodoService:
                     deleted_documents[todo_id],
                 )
 
-    async def delete_all_user_todos(
-        self, uow_session: UnitOfWork, current_user: SUserInfo
-    ) -> int:
+    async def delete_all_user_todos(self, uow_session: UnitOfWork, current_user: SUserInfo) -> int:
         """
         Удаление всех todo пользователя.
         Returns: количество удаленных записей
@@ -865,19 +831,14 @@ class TodoService:
             )
 
             todo_ids = [todo.id for todo in user_todos]
-            deleted_documents = {
-                todo.id: self._classification.build_search_document(todo)
-                for todo in user_todos
-            }
+            deleted_documents = {todo.id: self._classification.build_search_document(todo) for todo in user_todos}
 
             image_paths_to_delete = []
             for todo in user_todos:
                 if todo.image_path:
                     # Проверяем, используется ли изображение другими todo (любых пользователей)
-                    is_image_used_elsewhere = (
-                        await uow_session.todo.is_image_used_by_other_todos(
-                            image_path=todo.image_path, exclude_todo_id=todo.id
-                        )
+                    is_image_used_elsewhere = await uow_session.todo.is_image_used_by_other_todos(
+                        image_path=todo.image_path, exclude_todo_id=todo.id
                     )
                     if not is_image_used_elsewhere:
                         image_paths_to_delete.append(todo.image_path)
@@ -923,9 +884,7 @@ class TodoService:
             return {"dates": [], "series": [], "total": 0, "users_count": 0}
 
         dates = [item["date"] for item in data]
-        user_ids = sorted(
-            {bucket["author_id"] for item in data for bucket in item["users"]}
-        )
+        user_ids = sorted({bucket["author_id"] for item in data for bucket in item["users"]})
 
         async with uow_session.start():
             users = await uow_session.auth.get_users_by_ids(user_ids)
@@ -953,9 +912,7 @@ class TodoService:
         author_id = self._resolve_author_id(current_user)
         async with uow_session.start():
             if author_id:
-                todos: Sequence[TodoORM] = (
-                    await uow_session.todo.get_todos_by_author_id(author_id=author_id)
-                )
+                todos: Sequence[TodoORM] = await uow_session.todo.get_todos_by_author_id(author_id=author_id)
             else:
                 todos: Sequence[TodoORM] = await uow_session.todo.get_all()
 

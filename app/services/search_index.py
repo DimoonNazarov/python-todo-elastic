@@ -29,7 +29,7 @@ def _iso_format(value: Any) -> str | None:
     """
     return value.isoformat() if value else None
 
-  
+
 @dataclass
 class TodoClassificationService:
     """Сервис для определения уровня секретности и маскировки секретных фраз."""
@@ -53,6 +53,7 @@ class TodoClassificationService:
     }
 
     def enrich(self, item: Any) -> Any:
+        """Добавляет маскированные и display-поля в объект задачи."""
         title = _get_value(item, "title")
         details = _get_value(item, "details")
         masked_title = _get_value(item, "masked_title")
@@ -84,9 +85,11 @@ class TodoClassificationService:
         return item
 
     def enrich_list(self, items: Sequence[Any]) -> list[Any]:
+        """Обогащает список задач display-полями."""
         return [self.enrich(item) for item in items]
 
     def detect(self, text: str | None) -> str | None:
+        """Определяет уровень секретности текста."""
         if not text:
             return None
 
@@ -99,6 +102,7 @@ class TodoClassificationService:
         return None
 
     def mask(self, text: str | None) -> str | None:
+        """Маскирует секретные фразы в тексте."""
         if not text:
             return text
 
@@ -121,6 +125,7 @@ class TodoClassificationService:
         title: str,
         details: str | None,
     ) -> dict[str, Any]:
+        """Создаёт поля классификации и маскировки для Elasticsearch."""
         full_text = f"{title} {details}" if details else title
 
         classification = self.detect(full_text)
@@ -168,10 +173,8 @@ class TodoClassificationService:
         hits: Sequence[dict[str, Any]],
         todos: Sequence[Any],
     ) -> list[dict[str, Any]]:
-        todos_by_id = {
-            str(_get_value(todo, "id")): todo
-            for todo in todos
-        }
+        """Формирует документ задачи для индексации в Elasticsearch."""
+        todos_by_id = {str(_get_value(todo, "id")): todo for todo in todos}
 
         merged: list[dict[str, Any]] = []
 
