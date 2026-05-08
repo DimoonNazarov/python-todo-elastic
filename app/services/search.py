@@ -1,6 +1,6 @@
 import logging
 import math
-from typing import Callable
+from typing import Callable, Any
 
 from app.core import UnitOfWork
 from app.exceptions import InvalidPageException
@@ -13,8 +13,8 @@ SEARCH_RESULTS_FETCH_LIMIT = 1000
 
 
 class SearchService:
-    def __init__(self):
-        self._classification = TodoClassificationService()
+    def __init__(self, classification_service: TodoClassificationService):
+        self._classification = classification_service
 
     @staticmethod
     def _resolve_author_id(user: SUserInfo) -> int | None:
@@ -24,14 +24,16 @@ class SearchService:
         """
         return user.id if user.role == UserRole.VIEWER else None
 
-    async def _index_todo(
+    async def index_todo(
         self,
         uow_session: UnitOfWork,
         todo,
         file_content: str = "",
     ) -> None:
         """Индексация todo в Elasticsearch"""
-        document = self._classification.build_search_document(todo=todo, file_content=file_content)
+        document = self._classification.build_search_document(
+            todo=todo, file_content=file_content
+        )
         await uow_session.elastic.ensure_index_exists()
         await uow_session.elastic.index_document(todo_id=todo.id, document=document)
 
@@ -53,12 +55,12 @@ class SearchService:
         query: str | None,
         search_tag: str | None,
         search_date_from: str | None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Поиск todo через Elasticsearch"""
         author_id = self._resolve_author_id(current_user)
 
         # SEARCH BY QUERY
-        if query
+        if query:
             return await self._search_response(
                 uow_session=uow_session,
                 search_callable=uow_session.elastic.search_todos,
@@ -74,7 +76,7 @@ class SearchService:
             )
 
         # SEARCH BY TAG
-        if search_tag
+        if search_tag:
             return await self._search_response(
                 uow_session=uow_session,
                 search_callable=uow_session.elastic.search_by_tag,
@@ -113,20 +115,18 @@ class SearchService:
         }
 
     async def _search_response(
-    self,
-    uow_session: UnitOfWork,
-    search_callable: Callable,
-    search_kwargs: dict,
-    limit: int,
-    skip: int,
-    search_mode: str,
-    subtitle: str
-    ):
-
+        self,
+        uow_session: UnitOfWork,
+        search_callable: Callable,
+        search_kwargs: dict,
+        limit: int,
+        skip: int,
+        search_mode: str,
+        subtitle: str,
+    ) -> dict[str, Any]:
+        """Универсальная обработка search response."""
         search_result = await search_callable(
-            limit=SEARCH_RESULTS_FETCH_LIMIT,
-            skip=0,
-            **search_kwargs
+            limit=SEARCH_RESULTS_FETCH_LIMIT, skip=0, **search_kwargs
         )
         found_todos = await self._get_search_todos_from_hits(
             uow_session=uow_session,
@@ -153,3 +153,23 @@ class SearchService:
             "subtitle": subtitle,
         }
 
+    async def _get_search_todos_from_hits(
+        self,
+        uow_session: UnitOfWork,
+        hits: list[dict],
+    ) -> list[dict[str, Any]]:
+        """Преобразование Elasticsearch hits → todo objects."""
+        todo_ids = [
+            int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None
+        ]
+
+        if not todo_ids:
+            return []
+
+        async with uow_session.start():
+            todos = await uow_session.todo.get_todos_by_ids(todo_ids)
+
+        return self._classification.merge_search_hits_with_todos(
+            hits=hits,
+            todos=todos,
+        )

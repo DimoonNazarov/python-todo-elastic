@@ -21,6 +21,7 @@ from app.exceptions import (
 from app.models import Todo as TodoORM, TodoEditHistory
 from app.schemas import SUserInfo, Tags, Todo as TodoSchema, TodoSource, UserRole
 from app.services.openrouter import OpenRouterService
+from app.services.search import SearchService
 from app.services.search_index import TodoClassificationService
 from app.services.clustering import cluster_todos
 from app.services.summary import build_spacy_summary
@@ -38,13 +39,18 @@ from app.utils import (
 
 logger = logging.getLogger(__name__)
 TODO_DETAILS_MAX_LENGTH = 1000
-SEARCH_RESULTS_FETCH_LIMIT = 1000
 
 
 class TodoService:
-    def __init__(self, openrouter_service: OpenRouterService) -> None:
+    def __init__(
+        self,
+        openrouter_service: OpenRouterService,
+        search_service: SearchService,
+        classification_service: TodoClassificationService,
+    ) -> None:
         self._openrouter_service = openrouter_service
         self._classification = TodoClassificationService()
+        self._search_service = search_service
 
     @staticmethod
     def _build_todo_history_entry(
@@ -106,7 +112,9 @@ class TodoService:
     def _ensure_llm_source_text(details: str | None) -> str:
         """Проверяет, что описание не пустое, и возвращает его; иначе выбрасывает исключение для LLM-операций."""
         if not details or not details.strip():
-            raise LLMRequestException("Для выполнения операции нужно заполнить описание заметки.")
+            raise LLMRequestException(
+                "Для выполнения операции нужно заполнить описание заметки."
+            )
         return details.strip()
 
     @staticmethod
@@ -115,7 +123,9 @@ class TodoService:
         if details is None:
             return
         if len(details) > TODO_DETAILS_MAX_LENGTH:
-            raise InvalidTodoDataException("Описание заметки не может превышать 1000 символов.")
+            raise InvalidTodoDataException(
+                "Описание заметки не может превышать 1000 символов."
+            )
 
     @staticmethod
     def _build_cluster_context(cluster_todos_data: Sequence[TodoORM]) -> str:
@@ -141,7 +151,9 @@ class TodoService:
         for cluster in clusters:
             cluster_items = cluster["todos"]
             if any(getattr(item, "id", None) == -1 for item in cluster_items):
-                return [item for item in cluster_items if getattr(item, "id", None) != -1]
+                return [
+                    item for item in cluster_items if getattr(item, "id", None) != -1
+                ]
         return list(todos[:5])
 
     @staticmethod
@@ -156,12 +168,17 @@ class TodoService:
         if image and image.filename:
             image_hash = await hash_image(image)
             duplicate = await uow_session.todo.is_duplicate_image(image_hash)
-            if await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id) is None:
+            if (
+                await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id)
+                is None
+            ):
                 await delete_image(todo.image_path)
             if duplicate:
                 logger.info("Duplicate image detected.")
                 return duplicate.image_path, image_hash
-            random_filename = generate_random_filename() + "." + image.filename.split(".")[-1]
+            random_filename = (
+                generate_random_filename() + "." + image.filename.split(".")[-1]
+            )
             await load_image(image, random_filename)
             return random_filename, image_hash
 
@@ -173,7 +190,10 @@ class TodoService:
                 if data is None:
                     raise NotFoundException(f"Image '{existing_image}' not found")
                 image_hash = data.image_hash
-            if await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id) is None:
+            if (
+                await uow_session.todo.get_todos_by_image_path(todo.image_path, todo.id)
+                is None
+            ):
                 await delete_image(todo.image_path)
             return existing_image, image_hash
 
@@ -231,36 +251,12 @@ class TodoService:
             logger.error("Failed to extract text from %s: %s", file_path, exc)
             return ""
 
-    async def _index_todo_in_search(
-        self,
-        uow_session: UnitOfWork,
-        todo: TodoORM,
-        file_content: str = "",
-    ) -> None:
-        document = self._classification.build_search_document(todo, file_content=file_content)
-        await uow_session.elastic.ensure_index_exists()
-        await uow_session.elastic.index_document(todo.id, document)
-
     @staticmethod
     def _parse_data(date_str: str | None) -> datetime | None:
         """Парсит строку с датой или возвращает None."""
         if not date_str:
             return None
         return datetime.strptime(date_str, "%Y-%m-%d")
-
-    async def _get_search_todos_from_hits(
-        self,
-        uow_session: UnitOfWork,
-        hits: list[dict],
-    ) -> list[dict]:
-        """Получает todo-объекты по результатам поиска Elasticsearch"""
-        todo_ids = [int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None]
-        if not todo_ids:
-            return []
-
-        async with uow_session.start():
-            todos = await uow_session.todo.get_todos_by_ids(todo_ids)
-        return self._classification.merge_search_hits_with_todos(hits, todos)
 
     async def create(
         self,
@@ -289,7 +285,9 @@ class TodoService:
                 if duplicate:
                     image_path = duplicate.image_path
                 else:
-                    filename = generate_random_filename() + "." + image.filename.split(".")[-1]
+                    filename = (
+                        generate_random_filename() + "." + image.filename.split(".")[-1]
+                    )
                     await load_image(image, filename)
                     image_path = filename
 
@@ -314,127 +312,14 @@ class TodoService:
             await uow_session.todo.add(todo)
             await uow_session.flush()
             try:
-                await self._index_todo_in_search(uow_session, todo, file_content=file_content)
+                await self._search_service.index_todo(
+                    uow_session=uow_session, todo=todo, file_content=file_content
+                )
             except Exception as exc:
-                raise SearchSyncException("Не удалось синхронизировать задачу с Elasticsearch.") from exc
+                raise SearchSyncException(
+                    "Не удалось синхронизировать задачу с Elasticsearch."
+                ) from exc
             uow_session.add_compensation(uow_session.elastic.delete_todo, todo.id)
-
-    async def get_todos_page(
-        self,
-        uow_session: UnitOfWork,
-        current_user: SUserInfo,
-        limit: int,
-        skip: int,
-        created_from: str | None,
-        created_to: str | None,
-        tag: str | None,
-        query: str | None,
-        search_tag: str | None,
-        search_date_from: str | None,
-    ) -> dict:
-        """Возвращает страницу задач с поддержкой поиска и фильтрации."""
-        author_id = self._resolve_author_id(current_user)
-
-        if query:
-            logger.debug("Поиск по запросу: %s", query)
-            search_result = await uow_session.elastic.search_todos(
-                query_text=query,
-                tag=tag,
-                limit=SEARCH_RESULTS_FETCH_LIMIT,
-                skip=0,
-                author_id=author_id,
-            )
-            found_todos = await self._get_search_todos_from_hits(
-                uow_session,
-                search_result["items"],
-            )
-            total = len(found_todos)
-            pages = math.ceil(total / limit) if total else 1
-            start = skip * limit
-            end = start + limit
-            todos = found_todos[start:end]
-            return {
-                "todos": todos,
-                "skip": skip,
-                "pages": pages,
-                "total": total,
-                "search_mode": "query",
-                "subtitle": "Результаты поиска по запросу: %s" % query,
-            }
-
-        if search_tag:
-            tag_display = search_tag.capitalize()
-
-            logger.debug("Поиск по тегу: %s", tag_display)
-            search_result = await uow_session.elastic.search_by_tag(
-                search_tag.capitalize(),
-                limit=SEARCH_RESULTS_FETCH_LIMIT,
-                skip=0,
-                author_id=author_id,
-            )
-            found_todos = await self._get_search_todos_from_hits(
-                uow_session,
-                search_result["items"],
-            )
-            total = len(found_todos)
-            pages = math.ceil(total / limit) if total else 1
-            start = skip * limit
-            end = start + limit
-            todos = found_todos[start:end]
-            return {
-                "todos": todos,
-                "skip": skip,
-                "pages": pages,
-                "total": total,
-                "search_mode": "tag",
-                "subtitle": "Результаты поиска по тегу: %s" % tag_display,
-            }
-
-        if search_date_from:
-            date_from_dt = datetime.fromisoformat(search_date_from)
-            logger.debug("Поиск по дате от: %s", date_from_dt)
-            search_result = await uow_session.elastic.search_by_date(
-                date_from_dt.isoformat(),
-                limit=SEARCH_RESULTS_FETCH_LIMIT,
-                skip=0,
-                author_id=author_id,
-            )
-            found_todos = await self._get_search_todos_from_hits(
-                uow_session,
-                search_result["items"],
-            )
-            total = len(found_todos)
-            pages = math.ceil(total / limit) if total else 1
-            start = skip * limit
-            end = start + limit
-            todos = found_todos[start:end]
-            return {
-                "todos": todos,
-                "skip": skip,
-                "pages": pages,
-                "total": total,
-                "search_mode": "date",
-                "subtitle": "Результаты поиска после %s" % date_from_dt.strftime("%d.%m.%Y %H:%M"),
-            }
-
-        todos, skip, pages = await self.get_todos(
-            uow_session=uow_session,
-            current_user=current_user,
-            limit=limit,
-            skip=skip,
-            created_from=created_from,
-            created_to=created_to,
-            tag=tag,
-        )
-
-        return {
-            "todos": todos,
-            "skip": skip,
-            "pages": pages,
-            "total": len(todos),
-            "search_mode": None,
-            "subtitle": None,
-        }
 
     async def get_todos(
         self,
@@ -461,7 +346,9 @@ class TodoService:
             pages = math.ceil(count / limit) if count else 1
 
             if skip > pages:
-                raise InvalidPageException(f"Page {skip} does not exist, total pages: {pages}")
+                raise InvalidPageException(
+                    f"Page {skip} does not exist, total pages: {pages}"
+                )
 
             todos = await uow_session.todo.get_many(
                 limit=limit,
@@ -561,13 +448,21 @@ class TodoService:
                 user_id=user.id,
             )
             updated_todo = await uow_session.todo.get_todo_by_id(todo_id)
-            await uow_session.todo.add_edit_history(self._build_todo_history_entry(updated_todo, user.id, "edit"))
+            await uow_session.todo.add_edit_history(
+                self._build_todo_history_entry(updated_todo, user.id, "edit")
+            )
 
             file_content = self._extract_file_content(resolved_file_path)
             try:
-                await self._index_todo_in_search(uow_session, updated_todo, file_content=file_content)
+                await self._search_service.index_todo(
+                    uow_session=uow_session,
+                    todo=updated_todo,
+                    file_content=file_content,
+                )
             except Exception as exc:
-                raise SearchSyncException("Не удалось синхронизировать изменения задачи с Elasticsearch.") from exc
+                raise SearchSyncException(
+                    "Не удалось синхронизировать изменения задачи с Elasticsearch."
+                ) from exc
             uow_session.add_compensation(
                 uow_session.elastic.index_document,
                 todo_id,
@@ -616,7 +511,9 @@ class TodoService:
             if user.role != UserRole.ADMIN and todo.author_id != user.id:
                 raise ForbiddenException("Вы можете реферировать только свои задачи")
 
-            summary = await self._openrouter_service.generate_summary(todo.title, todo.details)
+            summary = await self._openrouter_service.generate_summary(
+                todo.title, todo.details
+            )
             summary = self._normalize_llm_text(summary)
             await uow_session.todo.update_llm_summary(
                 todo_id=todo_id,
@@ -716,13 +613,17 @@ class TodoService:
 
         return todo, images
 
-    async def delete(self, uow_session: UnitOfWork, todo_id: int, current_user: SUserInfo) -> TodoORM:
+    async def delete(
+        self, uow_session: UnitOfWork, todo_id: int, current_user: SUserInfo
+    ) -> TodoORM:
         """Удаление todo с проверкой владельца."""
         async with uow_session.start():
             todo = await uow_session.todo.get_todo_by_id(todo_id=todo_id)
             if not todo:
                 raise NotFoundException(f"Todo with id {todo_id} not found")
-            if todo.author_id != current_user.id and not self._can_delete_any_todo(current_user):
+            if todo.author_id != current_user.id and not self._can_delete_any_todo(
+                current_user
+            ):
                 raise ForbiddenException("Вы можете удалять только свои задачи")
 
             logger.info("Deleting todo: %s", todo)
@@ -740,7 +641,9 @@ class TodoService:
             try:
                 await uow_session.elastic.delete_todo(todo_id)
             except Exception as exc:
-                raise SearchSyncException("Не удалось удалить задачу из Elasticsearch.") from exc
+                raise SearchSyncException(
+                    "Не удалось удалить задачу из Elasticsearch."
+                ) from exc
             uow_session.add_compensation(
                 uow_session.elastic.index_document,
                 todo_id,
@@ -766,7 +669,9 @@ class TodoService:
                 author_id=author_id,
             )
 
-    async def delete_multiple(self, uow_session: UnitOfWork, todo_ids: list[int], current_user: SUserInfo) -> None:
+    async def delete_multiple(
+        self, uow_session: UnitOfWork, todo_ids: list[int], current_user: SUserInfo
+    ) -> None:
         """Удаление нескольких todo по списку идентификаторов с проверкой прав владельца."""
         async with uow_session.start():
             todos = await uow_session.todo.get_todos_by_ids(todo_ids=todo_ids)
@@ -775,7 +680,9 @@ class TodoService:
 
             # Проверка прав: только владелец или админ может удалять
             if not self._can_delete_any_todo(current_user):
-                not_owned_ids = [todo.id for todo in todos if todo.author_id != current_user.id]
+                not_owned_ids = [
+                    todo.id for todo in todos if todo.author_id != current_user.id
+                ]
                 if not_owned_ids:
                     raise ForbiddenException("Вы можете удалять только свои задачи")
 
@@ -783,7 +690,9 @@ class TodoService:
             for todo in todos:
                 if (
                     todo.image_path
-                    and await uow_session.todo.get_todos_by_image_path(image_path=todo.image_path, todo_id=todo.id)
+                    and await uow_session.todo.get_todos_by_image_path(
+                        image_path=todo.image_path, todo_id=todo.id
+                    )
                     is None
                 ):
                     image_paths_to_delete.append(todo.image_path)
@@ -794,21 +703,28 @@ class TodoService:
             for todo in todos:
                 self._delete_file(todo.file_path)
 
-            deleted_documents = {todo.id: self._classification.build_search_document(todo) for todo in todos}
+            deleted_documents = {
+                todo.id: self._classification.build_search_document(todo)
+                for todo in todos
+            }
             await uow_session.todo.delete_by_ids(todo_ids)
 
             for todo_id in todo_ids:
                 try:
                     await uow_session.elastic.delete_todo(todo_id=todo_id)
                 except Exception as exc:
-                    raise SearchSyncException("Не удалось удалить задачи из Elasticsearch.") from exc
+                    raise SearchSyncException(
+                        "Не удалось удалить задачи из Elasticsearch."
+                    ) from exc
                 uow_session.add_compensation(
                     uow_session.elastic.index_document,
                     todo_id,
                     deleted_documents[todo_id],
                 )
 
-    async def delete_all_user_todos(self, uow_session: UnitOfWork, current_user: SUserInfo) -> int:
+    async def delete_all_user_todos(
+        self, uow_session: UnitOfWork, current_user: SUserInfo
+    ) -> int:
         """
         Удаление всех todo пользователя.
         Returns: количество удаленных записей
@@ -831,14 +747,19 @@ class TodoService:
             )
 
             todo_ids = [todo.id for todo in user_todos]
-            deleted_documents = {todo.id: self._classification.build_search_document(todo) for todo in user_todos}
+            deleted_documents = {
+                todo.id: self._classification.build_search_document(todo)
+                for todo in user_todos
+            }
 
             image_paths_to_delete = []
             for todo in user_todos:
                 if todo.image_path:
                     # Проверяем, используется ли изображение другими todo (любых пользователей)
-                    is_image_used_elsewhere = await uow_session.todo.is_image_used_by_other_todos(
-                        image_path=todo.image_path, exclude_todo_id=todo.id
+                    is_image_used_elsewhere = (
+                        await uow_session.todo.is_image_used_by_other_todos(
+                            image_path=todo.image_path, exclude_todo_id=todo.id
+                        )
                     )
                     if not is_image_used_elsewhere:
                         image_paths_to_delete.append(todo.image_path)
@@ -858,9 +779,13 @@ class TodoService:
                 await uow_session.todo.delete_by_author_id(current_user.id)
             for todo_id in todo_ids:
                 try:
-                    await uow_session.elastic.delete_todo(todo_id=todo_id)
+                    await self._search_service.delete_todo(
+                        uow_session=uow_session, todo_id=todo_id
+                    )
                 except Exception as exc:
-                    raise SearchSyncException("Не удалось удалить задачи из Elasticsearch.") from exc
+                    raise SearchSyncException(
+                        "Не удалось удалить задачи из Elasticsearch."
+                    ) from exc
                 uow_session.add_compensation(
                     uow_session.elastic.index_document,
                     todo_id,
@@ -884,7 +809,9 @@ class TodoService:
             return {"dates": [], "series": [], "total": 0, "users_count": 0}
 
         dates = [item["date"] for item in data]
-        user_ids = sorted({bucket["author_id"] for item in data for bucket in item["users"]})
+        user_ids = sorted(
+            {bucket["author_id"] for item in data for bucket in item["users"]}
+        )
 
         async with uow_session.start():
             users = await uow_session.auth.get_users_by_ids(user_ids)
@@ -912,7 +839,9 @@ class TodoService:
         author_id = self._resolve_author_id(current_user)
         async with uow_session.start():
             if author_id:
-                todos: Sequence[TodoORM] = await uow_session.todo.get_todos_by_author_id(author_id=author_id)
+                todos: Sequence[TodoORM] = (
+                    await uow_session.todo.get_todos_by_author_id(author_id=author_id)
+                )
             else:
                 todos: Sequence[TodoORM] = await uow_session.todo.get_all()
 
