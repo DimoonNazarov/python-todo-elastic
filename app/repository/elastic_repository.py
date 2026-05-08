@@ -77,6 +77,17 @@ def create_russian_analyzer_mapping():
                     "type": "text",
                     "analyzer": "russian_search_analyzer",
                 },
+                "file_content": {
+                    "type": "text",
+                    "analyzer": "russian_search_analyzer",
+                    "fields": {
+                        "agg": {
+                            "type": "text",
+                            "analyzer": "russian_agg_analyzer",
+                            "fielddata": True,
+                        }
+                    },
+                },
             }
         },
     }
@@ -93,6 +104,36 @@ class ElasticRepository:
             mapping = create_russian_analyzer_mapping()
             await self._client.indices.create(index=INDEX_NAME, body=mapping)
             logger.info("Index '%s' created with Russian analyzer.", INDEX_NAME)
+
+    async def ensure_file_content_field(self):
+        """Добавляет поле file_content (с sub-field agg) в маппинг существующего индекса."""
+        try:
+            mapping = await self._client.indices.get_mapping(index=INDEX_NAME)
+            properties = mapping[INDEX_NAME]["mappings"].get("properties", {})
+            fc = properties.get("file_content", {})
+            has_agg = "agg" in fc.get("fields", {})
+            if not fc or not has_agg:
+                await self._client.indices.put_mapping(
+                    index=INDEX_NAME,
+                    body={
+                        "properties": {
+                            "file_content": {
+                                "type": "text",
+                                "analyzer": "russian_search_analyzer",
+                                "fields": {
+                                    "agg": {
+                                        "type": "text",
+                                        "analyzer": "russian_agg_analyzer",
+                                        "fielddata": True,
+                                    }
+                                },
+                            }
+                        }
+                    },
+                )
+                logger.info("Updated 'file_content' field in index '%s'.", INDEX_NAME)
+        except Exception as exc:
+            logger.error("Failed to ensure file_content field: %s", exc)
 
     async def index_document(self, todo_id: int, document: dict):
         """Индексирует уже подготовленный документ задачи."""
@@ -166,6 +207,16 @@ class ElasticRepository:
                         }
                     }
                 },
+                {
+                    "match": {
+                        "file_content": {
+                            "query": query_text,
+                            "fuzziness": "AUTO",
+                            "operator": "or",
+                            "minimum_should_match": "30%",
+                        }
+                    }
+                },
             ]
         )
 
@@ -202,6 +253,7 @@ class ElasticRepository:
                         "details": {"number_of_fragments": 2},
                         "masked_title": {"number_of_fragments": 1},
                         "masked_details": {"number_of_fragments": 2},
+                        "file_content": {"number_of_fragments": 2},
                     },
                     "pre_tags": ["<mark>"],
                     "post_tags": ["</mark>"],
@@ -353,6 +405,9 @@ class ElasticRepository:
                     "top_details": {
                         "terms": {"field": "details.agg", "size": limit}
                     },
+                    "top_file_content": {
+                        "terms": {"field": "file_content.agg", "size": limit}
+                    },
                 },
             },
         )
@@ -364,6 +419,11 @@ class ElasticRepository:
             words_counter[bucket["key"]] = bucket["doc_count"]
 
         for bucket in aggs.get("top_details", {}).get("buckets", []):
+            words_counter[bucket["key"]] = (
+                words_counter.get(bucket["key"], 0) + bucket["doc_count"]
+            )
+
+        for bucket in aggs.get("top_file_content", {}).get("buckets", []):
             words_counter[bucket["key"]] = (
                 words_counter.get(bucket["key"], 0) + bucket["doc_count"]
             )

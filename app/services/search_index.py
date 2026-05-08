@@ -29,10 +29,10 @@ def _iso_format(value: Any) -> str | None:
     """
     return value.isoformat() if value else None
 
-
+  
 @dataclass
 class TodoClassificationService:
-    """Сервис для определения уровня секретности и маскировки секретных фраз в задачах."""
+    """Сервис для определения уровня секретности и маскировки секретных фраз."""
 
     PRIORITY_ORDER = [
         "особой важности",
@@ -53,8 +53,6 @@ class TodoClassificationService:
     }
 
     def enrich(self, item: Any) -> Any:
-        """Обогащает объект задачи полями display_title, display_details,
-        классификацией и маскировкой."""
         title = _get_value(item, "title")
         details = _get_value(item, "details")
         masked_title = _get_value(item, "masked_title")
@@ -62,9 +60,10 @@ class TodoClassificationService:
         classification = _get_value(item, "classification_level")
 
         if not classification or masked_title is None:
-            fields = self.build_document_fields(title, details)  # вот замена
+            fields = self.build_document_fields(title, details)
             classification = classification or fields["classification_level"]
             masked_title = masked_title or fields["masked_title"]
+
             if masked_details is None:
                 masked_details = fields["masked_details"]
 
@@ -74,45 +73,56 @@ class TodoClassificationService:
 
         author = _get_value(item, "author")
         author_email = _get_value(item, "author_email")
+
         if author_email is None and author is not None:
             author_email = _get_value(author, "email")
 
         _set_value(item, "author_email", author_email)
         _set_value(item, "display_title", masked_title or title)
         _set_value(item, "display_details", masked_details or details)
+
         return item
 
     def enrich_list(self, items: Sequence[Any]) -> list[Any]:
-        """Применяет enrich ко всем элементам коллекции."""
         return [self.enrich(item) for item in items]
 
     def detect(self, text: str | None) -> str | None:
-        """Определяет уровень секретности текста, возвращает наивысший найденный уровень."""
         if not text:
             return None
+
         text_lower = text.lower()
+
         for level in self.PRIORITY_ORDER:
             if level in text_lower:
                 return level
+
         return None
 
     def mask(self, text: str | None) -> str | None:
-        """Заменяет секретные фразы в тексте на нейтральные псевдонимы."""
         if not text:
             return text
+
         result = text
+
         for secret, replacement in sorted(
-            self.REPLACEMENTS.items(), key=lambda x: len(x[0]), reverse=True
+            self.REPLACEMENTS.items(),
+            key=lambda x: len(x[0]),
+            reverse=True,
         ):
-            result = re.compile(re.escape(secret), re.IGNORECASE).sub(
-                replacement, result
-            )
+            result = re.compile(
+                re.escape(secret),
+                re.IGNORECASE,
+            ).sub(replacement, result)
+
         return result
 
-    def build_document_fields(self, title: str, details: str | None) -> dict[str, Any]:
-        """Возвращает поля классификации и маскировки для индексации
-        в Elasticsearch (только при наличии секретных фраз)."""
+    def build_document_fields(
+        self,
+        title: str,
+        details: str | None,
+    ) -> dict[str, Any]:
         full_text = f"{title} {details}" if details else title
+
         classification = self.detect(full_text)
 
         if classification is None:
@@ -128,12 +138,16 @@ class TodoClassificationService:
             "masked_details": self.mask(details) if details else None,
         }
 
-    def build_search_document(self, todo: Any) -> dict[str, Any]:
-        """Формирует полный документ для индексации задачи в Elasticsearch."""
+    def build_search_document(
+        self,
+        todo: Any,
+        file_content: str = "",
+    ) -> dict[str, Any]:
         fields = self.build_document_fields(
             _get_value(todo, "title"),
             _get_value(todo, "details"),
         )
+
         return {
             "todo_id": _get_value(todo, "id"),
             "author_id": _get_value(todo, "author_id"),
@@ -145,6 +159,7 @@ class TodoClassificationService:
             "updated_by": _get_value(todo, "updated_by"),
             "completed": _get_value(todo, "completed"),
             "completed_at": _iso_format(_get_value(todo, "completed_at")),
+            "file_content": file_content,
             **fields,
         }
 
@@ -153,20 +168,27 @@ class TodoClassificationService:
         hits: Sequence[dict[str, Any]],
         todos: Sequence[Any],
     ) -> list[dict[str, Any]]:
-        """Объединяет результаты поиска из Elasticsearch с данными из БД, обогащает для отображения."""
-        todos_by_id = {str(_get_value(todo, "id")): todo for todo in todos}
+        todos_by_id = {
+            str(_get_value(todo, "id")): todo
+            for todo in todos
+        }
+
         merged: list[dict[str, Any]] = []
 
         for hit in hits:
             todo_id = str(hit.get("todo_id"))
             todo = todos_by_id.get(todo_id)
+
             if todo is None:
                 continue
 
             item = {
                 "id": _get_value(todo, "id"),
                 "author_id": _get_value(todo, "author_id"),
-                "author_email": _get_value(_get_value(todo, "author"), "email"),
+                "author_email": _get_value(
+                    _get_value(todo, "author"),
+                    "email",
+                ),
                 "title": _get_value(todo, "title"),
                 "details": _get_value(todo, "details"),
                 "tag": _get_value(todo, "tag"),
@@ -176,6 +198,7 @@ class TodoClassificationService:
                 "updated_at": _get_value(todo, "updated_at"),
                 "updated_by": _get_value(todo, "updated_by"),
                 "image_path": _get_value(todo, "image_path"),
+                "file_path": _get_value(todo, "file_path"),
                 "_score": hit.get("_score"),
                 "_id": hit.get("_id"),
                 "highlight": hit.get("highlight"),
@@ -183,6 +206,7 @@ class TodoClassificationService:
                 "masked_title": hit.get("masked_title"),
                 "masked_details": hit.get("masked_details"),
             }
+
             merged.append(self.enrich(item))
 
         return merged

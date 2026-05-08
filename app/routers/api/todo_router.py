@@ -411,6 +411,7 @@ async def add_todo(
     image: UploadFile = File(None),
     source: TodoSource = Form(...),
     due_at: datetime | None = Form(None),
+    attached_file: UploadFile = File(None),
 ):
     """Add new todo"""
     tag = tag.strip() if tag and tag.strip() else "Планы"
@@ -431,6 +432,7 @@ async def add_todo(
         image=image,
         author_id=user.id,
         due_at=due_at,
+        file=attached_file,
     )
 
     return {"status": "success", "details": "Todo added"}
@@ -516,6 +518,8 @@ async def edit_todo(
     image_path: str = Form(None),
     existing_image: str = Form(None),
     image: UploadFile = File(None),
+    attached_file: UploadFile = File(None),
+    remove_file: bool = Form(False),
 ):
     """Edit todo"""
     tag = tag.strip() if tag and tag.strip() else "Планы"
@@ -531,6 +535,8 @@ async def edit_todo(
         image_path=image_path,
         existing_image=existing_image,
         image=image,
+        attached_file=attached_file,
+        remove_file=remove_file,
     )
     return {"status": "success", "details": "Todo edited"}
 
@@ -712,6 +718,7 @@ async def import_file(
                 image_path=data["image_path"],
                 image_hash=data["image_hash"],
                 details_hash=data["details_hash"],
+                file_path=data.get("file_path"),
                 author_id=current_user.id,
             )
             await uow_session.todo.add(todo)

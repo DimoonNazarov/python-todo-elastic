@@ -43,6 +43,7 @@ class Todo(Base):
     details_hash: Mapped[str | None] = mapped_column(nullable=True, default=None)
     spacy_summary: Mapped[str | None] = mapped_column(nullable=True, default=None)
     llm_summary: Mapped[str | None] = mapped_column(nullable=True, default=None)
+    file_path: Mapped[str | None] = mapped_column(nullable=True, default=None)
 
     author = relationship(
         "User", foreign_keys=[author_id], back_populates="todos"  # Явно указываем

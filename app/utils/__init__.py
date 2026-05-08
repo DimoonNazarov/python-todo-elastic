@@ -10,6 +10,7 @@ from .utils import (
 )
 
 from .jwt_utils import create_access_token, create_refresh_token, verify_access_token, extract_bearer_token
+from .file_extract import extract_text_from_file, ALLOWED_FILE_EXTENSIONS
 from .security import get_password_hash, verify_password
 
 __all__ = [
@@ -26,5 +27,7 @@ __all__ = [
     "verify_access_token",
     "get_password_hash",
     "verify_password",
-    "extract_bearer_token"
+    "extract_bearer_token",
+    "extract_text_from_file",
+    "ALLOWED_FILE_EXTENSIONS",
 ]

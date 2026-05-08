@@ -1,8 +1,10 @@
 import logging
 import math
+import os
 import random
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import UploadFile
@@ -30,6 +32,8 @@ from app.utils import (
     hash_text,
     load_image,
     export_todos,
+    extract_text_from_file,
+    ALLOWED_FILE_EXTENSIONS,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,7 +82,7 @@ class TodoService:
 
     @staticmethod
     def _resolve_author_id(user: SUserInfo) -> int | None:
-        """Возвращает ID пользователя для фильтрации по автору"""
+        """Возвращает ID пользователя для фильтрации по автору."""
         return user.id if user.role == UserRole.VIEWER else None
 
     @staticmethod
@@ -198,18 +202,60 @@ class TodoService:
             random.choice(list(Tags)),
         )
 
+    @staticmethod
+    async def _save_file(file: UploadFile) -> str | None:
+        """Валидация расширения и сохранение файла в ./files/. Возвращает имя файла."""
+        if not file or not file.filename:
+            return None
+        ext = Path(file.filename).suffix.lower()
+        if ext not in ALLOWED_FILE_EXTENSIONS:
+            logger.warning("File extension %s is not allowed", ext)
+            return None
+        random_name = generate_random_filename() + ext
+        file_location = os.path.join("./files/", random_name)
+        content = await file.read()
+        with open(file_location, "wb") as f:
+            f.write(content)
+        logger.info("Saved attached file: %s", random_name)
+        return random_name
+
+    @staticmethod
+    def _delete_file(file_path: str | None) -> None:
+        """Удаляет файл из ./files/."""
+        if not file_path:
+            return
+        full_path = os.path.join("./files/", file_path)
+        if os.path.exists(full_path):
+            os.remove(full_path)
+            logger.info("Deleted attached file: %s", file_path)
+
+    @staticmethod
+    def _extract_file_content(file_path: str | None) -> str:
+        """Извлекает текстовое содержимое из прикреплённого файла."""
+        if not file_path:
+            return ""
+        full_path = os.path.join("./files/", file_path)
+        if not os.path.exists(full_path):
+            return ""
+        try:
+            return extract_text_from_file(full_path)
+        except Exception as exc:
+            logger.error("Failed to extract text from %s: %s", file_path, exc)
+            return ""
+
     async def _index_todo_in_search(
         self,
         uow_session: UnitOfWork,
         todo: TodoORM,
+        file_content: str = "",
     ) -> None:
-        document = self._classification.build_search_document(todo)
+        document = self._classification.build_search_document(todo, file_content=file_content)
         await uow_session.elastic.ensure_index_exists()
         await uow_session.elastic.index_document(todo.id, document)
 
     @staticmethod
     def _parse_data(date_str: str | None) -> datetime | None:
-        """Парсит строку с датой или возвращает None"""
+        """Парсит строку с датой или возвращает None."""
         if not date_str:
             return None
         return datetime.strptime(date_str, "%Y-%m-%d")
@@ -239,6 +285,7 @@ class TodoService:
         image: UploadFile | None,
         author_id: int,
         due_at: datetime | None = None,
+        file: UploadFile | None = None,
     ) -> None:
         details = self._normalize_details(details)
         self._validate_details(details)
@@ -260,6 +307,9 @@ class TodoService:
                     await load_image(image, filename)
                     image_path = filename
 
+            saved_file_path = await self._save_file(file)
+            file_content = self._extract_file_content(saved_file_path)
+
             todo = TodoORM(
                 title=title,
                 details=details,
@@ -272,12 +322,13 @@ class TodoService:
                 details_hash=hash_text(details),
                 completed=False,
                 author_id=author_id,
+                file_path=saved_file_path,
             )
 
             await uow_session.todo.add(todo)
             await uow_session.flush()
             try:
-                await self._index_todo_in_search(uow_session, todo)
+                await self._index_todo_in_search(uow_session, todo, file_content=file_content)
             except Exception as exc:
                 raise SearchSyncException("Не удалось синхронизировать задачу с Elasticsearch.") from exc
             uow_session.add_compensation(uow_session.elastic.delete_todo, todo.id)
@@ -451,6 +502,8 @@ class TodoService:
         image_path: str | None,
         existing_image: str | None,
         image: UploadFile | None,
+        attached_file: UploadFile | None = None,
+        remove_file: bool = False,
     ) -> TodoORM:
         details = self._normalize_details(details)
 
@@ -469,6 +522,17 @@ class TodoService:
             resolved_image_path, resolved_image_hash = await self._resolve_image(
                 uow_session, todo, image, existing_image, image_path
             )
+
+            # Resolve file_path
+            resolved_file_path = todo.file_path
+            if attached_file and attached_file.filename:
+                # New file uploaded — delete old one, save new
+                self._delete_file(todo.file_path)
+                resolved_file_path = await self._save_file(attached_file)
+            elif remove_file:
+                self._delete_file(todo.file_path)
+                resolved_file_path = None
+
             has_changes = any(
                 [
                     title != todo.title,
@@ -477,6 +541,7 @@ class TodoService:
                     tag != todo.tag,
                     resolved_image_path != todo.image_path,
                     resolved_image_hash != todo.image_hash,
+                    resolved_file_path != todo.file_path,
                 ]
             )
             if not has_changes:
@@ -494,6 +559,7 @@ class TodoService:
                 details_hash=hash_text(details) if details else todo.details_hash,
                 spacy_summary=todo.spacy_summary,
                 llm_summary=todo.llm_summary,
+                file_path=resolved_file_path,
             )
 
             if todo_change.completed:
@@ -513,8 +579,10 @@ class TodoService:
             await uow_session.todo.add_edit_history(
                 self._build_todo_history_entry(updated_todo, user.id, "edit")
             )
+
+            file_content = self._extract_file_content(resolved_file_path)
             try:
-                await self._index_todo_in_search(uow_session, updated_todo)
+                await self._index_todo_in_search(uow_session, updated_todo, file_content=file_content)
             except Exception as exc:
                 raise SearchSyncException("Не удалось синхронизировать изменения задачи с Elasticsearch.") from exc
             uow_session.add_compensation(
@@ -670,7 +738,7 @@ class TodoService:
     async def delete(
         self, uow_session: UnitOfWork, todo_id: int, current_user: SUserInfo
     ) -> TodoORM:
-        """Удаление todo с проверкой владельца"""
+        """Удаление todo с проверкой владельца."""
         async with uow_session.start():
             todo = await uow_session.todo.get_todo_by_id(todo_id=todo_id)
             if not todo:
@@ -690,6 +758,7 @@ class TodoService:
                 is None
             ):
                 await delete_image(todo.image_path)
+            self._delete_file(todo.file_path)
             await uow_session.todo.delete_todo(todo_id)
             try:
                 await uow_session.elastic.delete_todo(todo_id)
@@ -723,7 +792,7 @@ class TodoService:
     async def delete_multiple(
         self, uow_session: UnitOfWork, todo_ids: list[int], current_user: SUserInfo
     ) -> None:
-        """Удаление нескольких todo по списку идентификаторов с проверкой прав владельца"""
+        """Удаление нескольких todo по списку идентификаторов с проверкой прав владельца."""
         async with uow_session.start():
             todos = await uow_session.todo.get_todos_by_ids(todo_ids=todo_ids)
             if not todos:
@@ -751,6 +820,9 @@ class TodoService:
             for image_path in image_paths_to_delete:
                 await delete_image(image_path)
 
+            for todo in todos:
+                self._delete_file(todo.file_path)
+
             deleted_documents = {
                 todo.id: self._classification.build_search_document(todo)
                 for todo in todos
@@ -772,7 +844,7 @@ class TodoService:
         self, uow_session: UnitOfWork, current_user: SUserInfo
     ) -> int:
         """
-        Удаление всех todo пользователя
+        Удаление всех todo пользователя.
         Returns: количество удаленных записей
         """
         is_admin = self._can_delete_any_todo(current_user)
@@ -815,6 +887,10 @@ class TodoService:
                     await delete_image(image_path)
                 except Exception as e:
                     logger.error("Failed to delete image %s: %s", image_path, e)
+
+            for todo in user_todos:
+                self._delete_file(todo.file_path)
+
             if is_admin:
                 await uow_session.todo.delete_all()
             else:
@@ -837,7 +913,6 @@ class TodoService:
         """Возвращает данные для графика активности пользователей по дням."""
         author_id = self._resolve_author_id(current_user)
 
-        # Получаем данные из Elasticsearch
         data = await uow_session.elastic.get_notes_per_day_by_user(
             days,
             author_id=author_id,
@@ -847,18 +922,15 @@ class TodoService:
         if not data:
             return {"dates": [], "series": [], "total": 0, "users_count": 0}
 
-        # Извлекаем даты и ID пользователей
         dates = [item["date"] for item in data]
         user_ids = sorted(
             {bucket["author_id"] for item in data for bucket in item["users"]}
         )
 
-        # Загружаем информацию о пользователях
         async with uow_session.start():
             users = await uow_session.auth.get_users_by_ids(user_ids)
         users_by_id = {user.id: user for user in users}
 
-        # Формируем данные для серий графика
         series = []
         for user_id in user_ids:
             user = users_by_id.get(user_id)
@@ -875,7 +947,6 @@ class TodoService:
             "total": sum(item["total"] for item in data),
             "users_count": len(series),
         }
-
 
     async def export(self, uow_session: UnitOfWork, current_user: SUserInfo) -> str:
         """Экспортирует задачи пользователя в Excel-файл."""
