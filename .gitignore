@@ -6,4 +6,5 @@ files/
 venv
 .DS_Store
 .env
+.env.test
 .codex

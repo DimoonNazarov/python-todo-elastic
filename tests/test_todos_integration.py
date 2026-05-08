@@ -19,6 +19,7 @@ async def _register_and_login(
             "confirm_password": password,
             "first_name": "Test",
             "last_name": "User",
+            "role": role,
         },
         follow_redirects=False,
     )
