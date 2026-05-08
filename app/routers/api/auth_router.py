@@ -8,7 +8,6 @@ from app.exceptions import (
     InvalidCredentials,
 )
 from app.utils import (
-    OAuth2PasswordBearerWithCookie,
     extract_bearer_token,
 )
 from app.schemas import (
@@ -30,7 +29,6 @@ from app.config import settings
 # pylint: disable=invalid-name
 templates = Jinja2Templates(directory="app/templates")
 auth_router = APIRouter(prefix="/auth", tags=["Auth"])
-oauth2_scheme = OAuth2PasswordBearerWithCookie(tokenUrl="token")
 
 
 async def _build_register_context(

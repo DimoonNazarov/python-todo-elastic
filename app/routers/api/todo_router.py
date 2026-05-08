@@ -23,11 +23,10 @@ from app.dependencies import get_todo_service
 from app.routers.dependencies import get_current_active_user
 from app.schemas import TodoSource, SUserInfo, UserRole
 from app.models import Todo as TodoORM
-from app.services.search_index import build_search_document, enrich_todo_display
+
 from app.services.todo import TodoService
-from app.utils import (
-    import_todos,
-)
+from app.utils import import_todos
+
 
 todo_router = APIRouter(prefix="/todo", tags=["Todo"])
 
@@ -489,7 +488,7 @@ async def get_todo(
     )
 
     logger.info("Getting todo: %s", todo)
-    todo = enrich_todo_display(todo)
+    todo = todo_service._classification.enrich(todo)
 
     tags = await uow_session.elastic.get_all_tags()
     return templates.TemplateResponse(
@@ -692,6 +691,7 @@ async def export_page(request: Request):
 async def import_file(
     uow_session: Annotated[UnitOfWork, Depends(get_async_uow_session)],
     current_user: Annotated[SUserInfo, Depends(get_current_active_user)],
+    todo_service: Annotated[TodoService, Depends(get_todo_service)],
     file: UploadFile = File(...),
 ):
     file_location = os.path.join("./files/", file.filename)
@@ -724,7 +724,7 @@ async def import_file(
             await uow_session.todo.add(todo)
             await uow_session.flush()
 
-            document = build_search_document(todo)
+            document = todo_service._classification.build_search_document(todo)
             await uow_session.elastic.ensure_index_exists()
             await uow_session.elastic.index_document(todo.id, document)
             uow_session.add_compensation(uow_session.elastic.delete_todo, todo.id)

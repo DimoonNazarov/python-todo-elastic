@@ -1,10 +1,8 @@
 from typing import Annotated
-
 from fastapi import Depends
 
-from app.services import AuthService
-from app.services import OpenRouterService
-from app.services import TodoService
+from app.services import AuthService, TodoService, OpenRouterService
+
 
 
 def get_auth_service() -> AuthService:

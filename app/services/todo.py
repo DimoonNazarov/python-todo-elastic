@@ -21,11 +21,10 @@ from app.exceptions import (
 from app.models import Todo as TodoORM, TodoEditHistory
 from app.schemas import SUserInfo, Tags, Todo as TodoSchema, TodoSource, UserRole
 from app.services.openrouter import OpenRouterService
-from app.services.search_index import build_search_document
-from app.services.search_index import enrich_todo_display_list
-from app.services.search_index import merge_search_hits_with_todos
+from app.services.search_index import TodoClassificationService
 from app.services.clustering import cluster_todos
 from app.services.summary import build_spacy_summary
+from app.constants import GENERATED_TITLES, GENERATED_DETAILS
 from app.utils import (
     delete_image,
     generate_random_filename,
@@ -40,56 +39,12 @@ from app.utils import (
 logger = logging.getLogger(__name__)
 TODO_DETAILS_MAX_LENGTH = 1000
 SEARCH_RESULTS_FETCH_LIMIT = 1000
-GENERATED_TITLES = [
-    "Купить продукты",
-    "Сделать домашнее задание",
-    "Позвонить маме",
-    "Почитать книгу",
-    "Сходить в спортзал",
-    "Приготовить ужин",
-    "Написать отчёт",
-    "Изучить Python",
-    "Посмотреть лекцию",
-    "Починить велосипед",
-    "Убраться в комнате",
-    "Оплатить счета",
-    "Записаться к врачу",
-    "Составить план на неделю",
-    "Полить цветы",
-    "Обновить резюме",
-    "Ответить на письма",
-    "Настроить Docker",
-    "Сделать бэкап данных",
-    "Пройти онлайн-курс",
-    "Написать тесты",
-    "Отрефакторить код",
-    "Прочитать документацию",
-    "Сходить на прогулку",
-    "Проверить почту",
-    "Сделать презентацию",
-    "Изучить Elasticsearch",
-    "Запустить миграции",
-    "Обновить зависимости",
-    "Написать README",
-]
-
-GENERATED_DETAILS = [
-    "Не забыть сделать это сегодня",
-    "Важная задача, требует внимания",
-    "Запланировано на эту неделю",
-    "Низкий приоритет, но нужно сделать",
-    "Срочно, дедлайн скоро",
-    "Обсудить с командой перед выполнением",
-    "Требует дополнительных ресурсов",
-    "Можно делегировать при необходимости",
-    "",
-    "",
-]
 
 
 class TodoService:
     def __init__(self, openrouter_service: OpenRouterService) -> None:
         self._openrouter_service = openrouter_service
+        self._classification = TodoClassificationService()
 
     @staticmethod
     def _build_todo_history_entry(
@@ -97,6 +52,7 @@ class TodoService:
         editor_id: int,
         action: str,
     ) -> TodoEditHistory:
+        """Создаёт запись в истории изменений задачи с фиксацией всех значимых полей."""
         edited_at = todo.updated_at or datetime.now(UTC)
         return TodoEditHistory(
             todo_id=todo.id,
@@ -116,77 +72,48 @@ class TodoService:
 
     @staticmethod
     def _can_view_only_own_todos(user: SUserInfo) -> bool:
+        """Проверяет, имеет ли пользователь роль VIEWER (может видеть только свои задачи)."""
         return user.role == UserRole.VIEWER
 
     @staticmethod
     def _can_delete_any_todo(user: SUserInfo) -> bool:
+        """Проверяет, имеет ли пользователь роль ADMIN (может удалять любые задачи)."""
         return user.role == UserRole.ADMIN
 
     @staticmethod
     def _resolve_author_id(user: SUserInfo) -> int | None:
+        """Возвращает ID пользователя для фильтрации по автору."""
         return user.id if user.role == UserRole.VIEWER else None
 
     @staticmethod
     def _normalize_llm_text(text: str, fallback: str | None = None) -> str:
+        """
+        Очищает текст от лишних кавычек и пробелов после LLM, возвращает
+        fallback при пустом результате.
+        """
         normalized = text.strip().strip("\"'«»")
         normalized = " ".join(normalized.split())
         return normalized or (fallback or "")
 
     @staticmethod
     def _normalize_details(details: str | None) -> str | None:
+        """Нормализует переносы строк в описании: заменяет CRLF и CR на LF."""
         if details is None:
             return None
         return details.replace("\r\n", "\n").replace("\r", "\n")
 
     @staticmethod
-    async def _save_file(file: UploadFile) -> str | None:
-        """Валидация расширения и сохранение файла в ./files/. Возвращает имя файла."""
-        if not file or not file.filename:
-            return None
-        ext = Path(file.filename).suffix.lower()
-        if ext not in ALLOWED_FILE_EXTENSIONS:
-            logger.warning("File extension %s is not allowed", ext)
-            return None
-        random_name = generate_random_filename() + ext
-        file_location = os.path.join("./files/", random_name)
-        content = await file.read()
-        with open(file_location, "wb") as f:
-            f.write(content)
-        logger.info("Saved attached file: %s", random_name)
-        return random_name
-
-    @staticmethod
-    def _delete_file(file_path: str | None) -> None:
-        """Удаляет файл из ./files/."""
-        if not file_path:
-            return
-        full_path = os.path.join("./files/", file_path)
-        if os.path.exists(full_path):
-            os.remove(full_path)
-            logger.info("Deleted attached file: %s", file_path)
-
-    @staticmethod
-    def _extract_file_content(file_path: str | None) -> str:
-        """Извлекает текстовое содержимое из прикреплённого файла."""
-        if not file_path:
-            return ""
-        full_path = os.path.join("./files/", file_path)
-        if not os.path.exists(full_path):
-            return ""
-        try:
-            return extract_text_from_file(full_path)
-        except Exception as exc:
-            logger.error("Failed to extract text from %s: %s", file_path, exc)
-            return ""
-
-    @staticmethod
     def _ensure_llm_source_text(details: str | None) -> str:
+        """Проверяет, что описание не пустое, и возвращает его; иначе выбрасывает исключение для LLM-операций."""
         if not details or not details.strip():
-            raise LLMRequestException("Для выполнения операции нужно заполнить описание заметки.")
+            raise LLMRequestException(
+                "Для выполнения операции нужно заполнить описание заметки."
+            )
         return details.strip()
 
     @staticmethod
     def _validate_details(details: str | None) -> None:
+        """Проверяет, что длина описания не превышает максимально допустимую (TODO_DETAILS_MAX_LENGTH)."""
         if details is None:
             return
         if len(details) > TODO_DETAILS_MAX_LENGTH:
@@ -276,34 +203,77 @@ class TodoService:
         )
 
     @staticmethod
+    async def _save_file(file: UploadFile) -> str | None:
+        """Валидация расширения и сохранение файла в ./files/. Возвращает имя файла."""
+        if not file or not file.filename:
+            return None
+        ext = Path(file.filename).suffix.lower()
+        if ext not in ALLOWED_FILE_EXTENSIONS:
+            logger.warning("File extension %s is not allowed", ext)
+            return None
+        random_name = generate_random_filename() + ext
+        file_location = os.path.join("./files/", random_name)
+        content = await file.read()
+        with open(file_location, "wb") as f:
+            f.write(content)
+        logger.info("Saved attached file: %s", random_name)
+        return random_name
+
+    @staticmethod
+    def _delete_file(file_path: str | None) -> None:
+        """Удаляет файл из ./files/."""
+        if not file_path:
+            return
+        full_path = os.path.join("./files/", file_path)
+        if os.path.exists(full_path):
+            os.remove(full_path)
+            logger.info("Deleted attached file: %s", file_path)
+
+    @staticmethod
+    def _extract_file_content(file_path: str | None) -> str:
+        """Извлекает текстовое содержимое из прикреплённого файла."""
+        if not file_path:
+            return ""
+        full_path = os.path.join("./files/", file_path)
+        if not os.path.exists(full_path):
+            return ""
+        try:
+            return extract_text_from_file(full_path)
+        except Exception as exc:
+            logger.error("Failed to extract text from %s: %s", file_path, exc)
+            return ""
+
     async def _index_todo_in_search(
+        self,
         uow_session: UnitOfWork,
         todo: TodoORM,
         file_content: str = "",
     ) -> None:
-        document = build_search_document(todo, file_content=file_content)
+        document = self._classification.build_search_document(todo, file_content=file_content)
         await uow_session.elastic.ensure_index_exists()
         await uow_session.elastic.index_document(todo.id, document)
 
     @staticmethod
     def _parse_data(date_str: str | None) -> datetime | None:
-        """Парсит строку с датой или возвращает None"""
+        """Парсит строку с датой или возвращает None."""
         if not date_str:
             return None
         return datetime.strptime(date_str, "%Y-%m-%d")
 
-    @staticmethod
     async def _get_search_todos_from_hits(
+        self,
         uow_session: UnitOfWork,
         hits: list[dict],
     ) -> list[dict]:
-        todo_ids = [int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None]
+        todo_ids = [
+            int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None
+        ]
         if not todo_ids:
             return []
 
         async with uow_session.start():
             todos = await uow_session.todo.get_todos_by_ids(todo_ids)
-        return merge_search_hits_with_todos(hits, todos)
+        return self._classification.merge_search_hits_with_todos(hits, todos)
 
     async def create(
         self,
@@ -321,7 +291,6 @@ class TodoService:
         self._validate_details(details)
 
         async with uow_session.start():
-
             image_path = None
             image_hash = None
 
@@ -441,7 +410,7 @@ class TodoService:
                 date_from_dt.isoformat(),
                 limit=SEARCH_RESULTS_FETCH_LIMIT,
                 skip=0,
-                author_id=author_id
+                author_id=author_id,
             )
             found_todos = await self._get_search_todos_from_hits(
                 uow_session,
@@ -496,7 +465,6 @@ class TodoService:
         author_id = self._resolve_author_id(current_user)
 
         async with uow_session.start():
-
             count = await uow_session.todo.get_count_todos(
                 created_from=created_from,
                 created_to=created_to,
@@ -519,7 +487,7 @@ class TodoService:
                 author_id=author_id,
             )
 
-        return enrich_todo_display_list(todos), skip, pages
+        return self._classification.enrich_list(todos), skip, pages
 
     async def update(
         self,
@@ -579,7 +547,7 @@ class TodoService:
             if not has_changes:
                 return todo
 
-            previous_document = build_search_document(todo)
+            previous_document = self._classification.build_search_document(todo)
             todo_change = TodoSchema(
                 title=title,
                 details=details,
@@ -665,7 +633,9 @@ class TodoService:
             if user.role != UserRole.ADMIN and todo.author_id != user.id:
                 raise ForbiddenException("Вы можете реферировать только свои задачи")
 
-            summary = await self._openrouter_service.generate_summary(todo.title, todo.details)
+            summary = await self._openrouter_service.generate_summary(
+                todo.title, todo.details
+            )
             summary = self._normalize_llm_text(summary)
             await uow_session.todo.update_llm_summary(
                 todo_id=todo_id,
@@ -768,7 +738,7 @@ class TodoService:
     async def delete(
         self, uow_session: UnitOfWork, todo_id: int, current_user: SUserInfo
     ) -> TodoORM:
-        """Удаление todo с проверкой владельца"""
+        """Удаление todo с проверкой владельца."""
         async with uow_session.start():
             todo = await uow_session.todo.get_todo_by_id(todo_id=todo_id)
             if not todo:
@@ -779,7 +749,7 @@ class TodoService:
                 raise ForbiddenException("Вы можете удалять только свои задачи")
 
             logger.info("Deleting todo: %s", todo)
-            deleted_document = build_search_document(todo)
+            deleted_document = self._classification.build_search_document(todo)
             if (
                 await uow_session.todo.get_todos_by_image_path(
                     image_path=todo.image_path,
@@ -822,7 +792,7 @@ class TodoService:
     async def delete_multiple(
         self, uow_session: UnitOfWork, todo_ids: list[int], current_user: SUserInfo
     ) -> None:
-        """Удаление нескольких todo по списку идентификаторов с проверкой прав владельца"""
+        """Удаление нескольких todo по списку идентификаторов с проверкой прав владельца."""
         async with uow_session.start():
             todos = await uow_session.todo.get_todos_by_ids(todo_ids=todo_ids)
             if not todos:
@@ -854,7 +824,7 @@ class TodoService:
                 self._delete_file(todo.file_path)
 
             deleted_documents = {
-                todo.id: build_search_document(todo)
+                todo.id: self._classification.build_search_document(todo)
                 for todo in todos
             }
             await uow_session.todo.delete_by_ids(todo_ids)
@@ -874,7 +844,7 @@ class TodoService:
         self, uow_session: UnitOfWork, current_user: SUserInfo
     ) -> int:
         """
-        Удаление всех todo пользователя
+        Удаление всех todo пользователя.
         Returns: количество удаленных записей
         """
         is_admin = self._can_delete_any_todo(current_user)
@@ -896,7 +866,7 @@ class TodoService:
 
             todo_ids = [todo.id for todo in user_todos]
             deleted_documents = {
-                todo.id: build_search_document(todo)
+                todo.id: self._classification.build_search_document(todo)
                 for todo in user_todos
             }
 
@@ -943,7 +913,6 @@ class TodoService:
         """Возвращает данные для графика активности пользователей по дням."""
         author_id = self._resolve_author_id(current_user)
 
-        # Получаем данные из Elasticsearch
         data = await uow_session.elastic.get_notes_per_day_by_user(
             days,
             author_id=author_id,
@@ -953,18 +922,15 @@ class TodoService:
         if not data:
             return {"dates": [], "series": [], "total": 0, "users_count": 0}
 
-        # Извлекаем даты и ID пользователей
         dates = [item["date"] for item in data]
         user_ids = sorted(
             {bucket["author_id"] for item in data for bucket in item["users"]}
         )
 
-        # Загружаем информацию о пользователях
         async with uow_session.start():
             users = await uow_session.auth.get_users_by_ids(user_ids)
         users_by_id = {user.id: user for user in users}
 
-        # Формируем данные для серий графика
         series = []
         for user_id in user_ids:
             user = users_by_id.get(user_id)
@@ -981,7 +947,6 @@ class TodoService:
             "total": sum(item["total"] for item in data),
             "users_count": len(series),
         }
-
 
     async def export(self, uow_session: UnitOfWork, current_user: SUserInfo) -> str:
         """Экспортирует задачи пользователя в Excel-файл."""

@@ -120,7 +120,7 @@ class TodoRepository:
         self,
         todo_id: int,
         spacy_summary: str | None,
-        user_id: int,
+        user_id: int
     ) -> None:
         await self.update(
             todo_id=todo_id,
