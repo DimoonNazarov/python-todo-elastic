@@ -277,9 +277,7 @@ class ElasticRepository:
         logger.info("Search for '%s' found %d results", query_text, len(results))
         return {"items": results, "total": total}
 
-    async def search_by_classification(
-        self, classification: str, limit: int = 50
-    ) -> list[dict]:
+    async def search_by_classification(self, classification: str, limit: int = 50) -> list[dict]:
         """Поиск тудушек по уровню секретности"""
         response = await self._client.search(
             index=INDEX_NAME,
@@ -380,11 +378,7 @@ class ElasticRepository:
         author_id: int | None = None,
     ):
         """Возвращает все тудушки из индекса"""
-        query = (
-            {"match_all": {}}
-            if author_id is None
-            else {"term": {"author_id": author_id}}
-        )
+        query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
         response = await self._client.search(
             index=INDEX_NAME,
             body={
@@ -397,11 +391,7 @@ class ElasticRepository:
         return [hit["_source"] for hit in response["hits"]["hits"]]
 
     async def get_top_words(self, limit: int = 10, author_id: int | None = None):
-        query = (
-            {"match_all": {}}
-            if author_id is None
-            else {"term": {"author_id": author_id}}
-        )
+        query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
         response = await self._client.search(
             index=INDEX_NAME,
             body={
@@ -410,9 +400,7 @@ class ElasticRepository:
                 "aggs": {
                     "top_title": {"terms": {"field": "title.agg", "size": limit}},
                     "top_details": {"terms": {"field": "details.agg", "size": limit}},
-                    "top_file_content": {
-                        "terms": {"field": "file_content.agg", "size": limit}
-                    },
+                    "top_file_content": {"terms": {"field": "file_content.agg", "size": limit}},
                 },
             },
         )
@@ -424,14 +412,10 @@ class ElasticRepository:
             words_counter[bucket["key"]] = bucket["doc_count"]
 
         for bucket in aggs.get("top_details", {}).get("buckets", []):
-            words_counter[bucket["key"]] = (
-                words_counter.get(bucket["key"], 0) + bucket["doc_count"]
-            )
+            words_counter[bucket["key"]] = words_counter.get(bucket["key"], 0) + bucket["doc_count"]
 
         for bucket in aggs.get("top_file_content", {}).get("buckets", []):
-            words_counter[bucket["key"]] = (
-                words_counter.get(bucket["key"], 0) + bucket["doc_count"]
-            )
+            words_counter[bucket["key"]] = words_counter.get(bucket["key"], 0) + bucket["doc_count"]
 
         sorted_words = sorted(words_counter.items(), key=lambda x: x[1], reverse=True)
         return [{"word": word, "count": count} for word, count in sorted_words[:limit]]
@@ -484,9 +468,7 @@ class ElasticRepository:
         result = []
         if "aggregations" in response:
             for bucket in response["aggregations"]["notes_per_period"]["buckets"]:
-                result.append(
-                    {"date": bucket["key_as_string"], "count": bucket["doc_count"]}
-                )
+                result.append({"date": bucket["key_as_string"], "count": bucket["doc_count"]})
         return result
 
     async def get_notes_per_day_by_user(

@@ -31,9 +31,7 @@ class SearchService:
         file_content: str = "",
     ) -> None:
         """Индексация todo в Elasticsearch"""
-        document = self._classification.build_search_document(
-            todo=todo, file_content=file_content
-        )
+        document = self._classification.build_search_document(todo=todo, file_content=file_content)
         await uow_session.elastic.ensure_index_exists()
         await uow_session.elastic.index_document(todo_id=todo.id, document=document)
 
@@ -125,9 +123,7 @@ class SearchService:
         subtitle: str,
     ) -> dict[str, Any]:
         """Универсальная обработка search response."""
-        search_result = await search_callable(
-            limit=SEARCH_RESULTS_FETCH_LIMIT, skip=0, **search_kwargs
-        )
+        search_result = await search_callable(limit=SEARCH_RESULTS_FETCH_LIMIT, skip=0, **search_kwargs)
         found_todos = await self._get_search_todos_from_hits(
             uow_session=uow_session,
             hits=search_result["items"],
@@ -159,9 +155,7 @@ class SearchService:
         hits: list[dict],
     ) -> list[dict[str, Any]]:
         """Преобразование Elasticsearch hits → todo objects."""
-        todo_ids = [
-            int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None
-        ]
+        todo_ids = [int(hit["todo_id"]) for hit in hits if hit.get("todo_id") is not None]
 
         if not todo_ids:
             return []

@@ -112,16 +112,9 @@ class TodoRepository:
     async def update(self, todo_id: int, values: dict, user_id: int) -> None:
         values["updated_at"] = datetime.now(timezone.utc)
         values["updated_by"] = user_id
-        await self._session.execute(
-            update(Todo).where(Todo.id == todo_id).values(**values)
-        )
+        await self._session.execute(update(Todo).where(Todo.id == todo_id).values(**values))
 
-    async def update_summary(
-        self,
-        todo_id: int,
-        spacy_summary: str | None,
-        user_id: int
-    ) -> None:
+    async def update_summary(self, todo_id: int, spacy_summary: str | None, user_id: int) -> None:
         await self.update(
             todo_id=todo_id,
             values={"spacy_summary": spacy_summary},
@@ -141,15 +134,11 @@ class TodoRepository:
         )
 
     async def delete_todo(self, todo_id: int):
-        await self._session.execute(
-            delete(TodoEditHistory).where(TodoEditHistory.todo_id == todo_id)
-        )
+        await self._session.execute(delete(TodoEditHistory).where(TodoEditHistory.todo_id == todo_id))
         await self._session.execute(delete(Todo).where(Todo.id == todo_id))
 
     async def delete_by_ids(self, ids: list[int]) -> None:
-        await self._session.execute(
-            delete(TodoEditHistory).where(TodoEditHistory.todo_id.in_(ids))
-        )
+        await self._session.execute(delete(TodoEditHistory).where(TodoEditHistory.todo_id.in_(ids)))
         await self._session.execute(delete(Todo).where(Todo.id.in_(ids)))
 
     async def delete_all(self) -> None:
@@ -157,23 +146,17 @@ class TodoRepository:
         await self._session.execute(delete(Todo))
 
     async def get_all_image_paths(self):
-        find_images = await self._session.execute(
-            select(distinct(Todo.image_path)).where(Todo.image_path.isnot(None))
-        )
+        find_images = await self._session.execute(select(distinct(Todo.image_path)).where(Todo.image_path.isnot(None)))
         data = find_images.scalars().all()
         return data
 
     async def is_duplicate_image(self, image_hash: str):
-        find_hash = await self._session.execute(
-            select(Todo).where(Todo.image_hash == image_hash)
-        )
+        find_hash = await self._session.execute(select(Todo).where(Todo.image_hash == image_hash))
         data = find_hash.scalars().first()
         return data.image_path if data else None
 
     async def get_todo_by_image_path(self, image_path: str) -> Todo | None:
-        result = await self._session.execute(
-            select(Todo).where(Todo.image_path == image_path)
-        )
+        result = await self._session.execute(select(Todo).where(Todo.image_path == image_path))
         return result.scalars().first()
 
     async def get_todos_by_image_path(self, image_path: str, todo_id: int):
@@ -199,22 +182,16 @@ class TodoRepository:
     async def delete_by_author_id(self, author_id: int) -> None:
         """Удалить все todo пользователя"""
         todo_ids_query = select(Todo.id).where(Todo.author_id == author_id)
-        await self._session.execute(
-            delete(TodoEditHistory).where(TodoEditHistory.todo_id.in_(todo_ids_query))
-        )
+        await self._session.execute(delete(TodoEditHistory).where(TodoEditHistory.todo_id.in_(todo_ids_query)))
         await self._session.execute(delete(Todo).where(Todo.author_id == author_id))
 
     async def clear_updated_by_for_user(self, user_id: int) -> None:
         """Очистить ссылки на пользователя в поле updated_by."""
-        await self._session.execute(
-            update(Todo).where(Todo.updated_by == user_id).values(updated_by=None)
-        )
+        await self._session.execute(update(Todo).where(Todo.updated_by == user_id).values(updated_by=None))
 
     async def clear_edit_history_editor_for_user(self, user_id: int) -> None:
         await self._session.execute(
-            update(TodoEditHistory)
-            .where(TodoEditHistory.editor_id == user_id)
-            .values(editor_id=None)
+            update(TodoEditHistory).where(TodoEditHistory.editor_id == user_id).values(editor_id=None)
         )
 
     async def get_duplicate_groups(self, author_id: int | None = None) -> list[dict]:
@@ -245,17 +222,13 @@ class TodoRepository:
 
         return groups
 
-    async def is_image_used_by_other_todos(
-        self, image_path: str, exclude_todo_id: int
-    ) -> bool:
+    async def is_image_used_by_other_todos(self, image_path: str, exclude_todo_id: int) -> bool:
         """
         Проверить, используется ли изображение другими todo
         (независимо от владельца)
         """
         result = await self._session.execute(
-            select(func.count(Todo.id)).where(
-                and_(Todo.image_path == image_path, Todo.id != exclude_todo_id)
-            )
+            select(func.count(Todo.id)).where(and_(Todo.image_path == image_path, Todo.id != exclude_todo_id))
         )
         count = result.scalar_one()
         return count > 0

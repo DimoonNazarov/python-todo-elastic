@@ -52,9 +52,7 @@ class AuthService:
         async with uow_session.start():
             user = await uow_session.auth.find_by_email(email=user_data.email)
 
-            if not user or not verify_password(
-                user_data.password, user.hashed_password
-            ):
+            if not user or not verify_password(user_data.password, user.hashed_password):
                 raise IncorrectEmailOrPasswordException
 
             token_data = {
@@ -67,17 +65,17 @@ class AuthService:
             access_token = create_access_token(data=token_data)
             refresh_token = create_refresh_token()
 
-            refresh_token_expires = datetime.now(UTC) + timedelta(
-                days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+            refresh_token_expires = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+            await uow_session.token.add(
+                RefreshToken(
+                    refresh_token=refresh_token,
+                    user_id=user.id,
+                    expires_at=refresh_token_expires,
+                    user_agent=user_agent,
+                    ip_address=ip_address,
+                    revoked=False,
+                )
             )
-            await uow_session.token.add(RefreshToken(
-                refresh_token=refresh_token,
-                user_id=user.id,
-                expires_at=refresh_token_expires,
-                user_agent=user_agent,
-                ip_address=ip_address,
-                revoked=False,
-            ))
 
             logger.info("Refresh token создан для %s", user.email)
 
@@ -102,9 +100,7 @@ class AuthService:
                 raise UserAlreadyExists()
 
             users_count = await uow_session.auth.count()
-            if users_count > 0 and (
-                current_user is None or current_user.role != UserRole.ADMIN
-            ):
+            if users_count > 0 and (current_user is None or current_user.role != UserRole.ADMIN):
                 raise ForbiddenException("Создавать пользователей может только администратор")
 
             hashed_password = get_password_hash(user_data.password)
@@ -167,18 +163,18 @@ class AuthService:
             token_record.revoked = True
 
             new_refresh_token = create_refresh_token()
-            expires_at = datetime.now(UTC) + timedelta(
-                days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-            )
+            expires_at = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
-            await uow_session.token.add(RefreshToken(
-                refresh_token=new_refresh_token,
-                user_id=user.id,
-                expires_at=expires_at,
-                user_agent=token_record.user_agent,
-                ip_address=token_record.ip_address,
-                revoked=False,
-            ))
+            await uow_session.token.add(
+                RefreshToken(
+                    refresh_token=new_refresh_token,
+                    user_id=user.id,
+                    expires_at=expires_at,
+                    user_agent=token_record.user_agent,
+                    ip_address=token_record.ip_address,
+                    revoked=False,
+                )
+            )
 
             token_data = {
                 "user_id": user.id,

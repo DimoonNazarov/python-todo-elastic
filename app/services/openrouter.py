@@ -18,9 +18,7 @@ class OpenRouterService:
 
     def _ensure_configured(self) -> None:
         if not self._api_key:
-            raise LLMConfigurationException(
-                "LLM не настроена: задайте OPENROUTER_API_KEY для работы с OpenRouter."
-            )
+            raise LLMConfigurationException("LLM не настроена: задайте OPENROUTER_API_KEY для работы с OpenRouter.")
 
     async def _complete(self, system_prompt: str, user_prompt: str) -> str:
         self._ensure_configured()
@@ -52,9 +50,7 @@ class OpenRouterService:
                 exc.response.status_code,
                 exc.response.text,
             )
-            raise LLMServiceException(
-                "OpenRouter вернул ошибку при обработке запроса."
-            ) from exc
+            raise LLMServiceException("OpenRouter вернул ошибку при обработке запроса.") from exc
         except httpx.HTTPError as exc:
             logger.error("OpenRouter request failed: %s", exc)
             raise LLMServiceException("Не удалось обратиться к OpenRouter API.") from exc
@@ -88,10 +84,7 @@ class OpenRouterService:
             "Ты делаешь краткие рефераты заметок на русском языке. "
             "Верни только короткое изложение сути заметки в 1-2 предложениях, без заголовка и без маркированных списков."
         )
-        user_prompt = (
-            f"Заголовок: {title or 'нет'}\n"
-            f"Текст заметки:\n{(details or '').strip()}"
-        )
+        user_prompt = f"Заголовок: {title or 'нет'}\nТекст заметки:\n{(details or '').strip()}"
         return await self._complete(system_prompt, user_prompt)
 
     async def suggest_tag(
