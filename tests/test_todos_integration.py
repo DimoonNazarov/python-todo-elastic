@@ -48,9 +48,14 @@ async def _add_todo(
     return response.json()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def user_client(ac: AsyncClient) -> AsyncClient:
-    """Клиент авторизованного обычного пользователя."""
+    """Клиент авторизованного обычного пользователя.
+
+    Function-scope: фикстура clean_tables очищает БД после каждого теста,
+    поэтому пользователя нужно регистрировать заново на каждый тест,
+    иначе get_current_active_user вернёт 403 (пользователь удалён).
+    """
     return await _register_and_login(ac, "todo_user@example.com")
 
 
