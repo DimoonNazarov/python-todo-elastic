@@ -8,7 +8,9 @@ from app.main import app
 
 
 async def _register_and_login(
-    ac: AsyncClient, email: str, password: str = "password123"
+    ac: AsyncClient,
+    email: str,
+    password: str = "password123",
 ) -> AsyncClient:
     """Регистрирует пользователя и возвращает клиент с куками."""
     await ac.post(
@@ -19,7 +21,6 @@ async def _register_and_login(
             "confirm_password": password,
             "first_name": "Test",
             "last_name": "User",
-            "role": role,
         },
         follow_redirects=False,
     )
@@ -47,11 +48,6 @@ async def _add_todo(
     return response.json()
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture(scope="module")
 async def user_client(ac: AsyncClient) -> AsyncClient:
     """Клиент авторизованного обычного пользователя."""
@@ -64,10 +60,6 @@ async def second_client(ac: AsyncClient) -> AsyncClient:
     # Первый пользователь (admin) должен быть уже создан — регистрируем второго
     async with AsyncClient(transport=ac._transport, base_url="http://test") as client:
         return await _register_and_login(client, "todo_user2@example.com")
-
-    # ---------------------------------------------------------------------------
-    # CREATE
-    # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -88,7 +80,9 @@ async def test_create_todo_success(user_client: AsyncClient):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_create_todo_without_auth():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as fresh_client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as fresh_client:
         response = await fresh_client.post(
             "/todo/add/",
             data={
@@ -99,13 +93,7 @@ async def test_create_todo_without_auth():
             },
             follow_redirects=False,
         )
-    # Без куки — редирект на логин или 401
     assert response.status_code in (302, 303, 401)
-
-
-# ---------------------------------------------------------------------------
-# READ / LIST
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -117,7 +105,6 @@ async def test_list_todos_returns_html(user_client: AsyncClient):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_list_todos_pagination(user_client: AsyncClient):
-    # Создаём несколько задач
     for i in range(3):
         await _add_todo(user_client, f"Задача пагинация {i}")
 
@@ -132,11 +119,6 @@ async def test_list_todos_filter_by_tag(user_client: AsyncClient):
     response = await user_client.get("/todo/list/?tag=Учёба")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-
-
-# ---------------------------------------------------------------------------
-# EDIT
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -174,11 +156,6 @@ async def test_edit_todo_mark_completed(user_client: AsyncClient):
         },
     )
     assert response.status_code == 200
-
-
-# ---------------------------------------------------------------------------
-# DELETE
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio(loop_scope="session")

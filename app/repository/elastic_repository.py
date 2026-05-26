@@ -1,6 +1,6 @@
 from elasticsearch import AsyncElasticsearch, NotFoundError
 import logging
-from app.constants import ALL_STOPWORDS, CLASSIFICATION_REPLACEMENTS
+from app.constants import ALL_STOPWORDS
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +226,6 @@ class ElasticRepository:
         if author_id is not None:
             must_clauses.append({"term": {"author_id": author_id}})
 
-
         # Убеждаемся, что индекс существует
         await self.ensure_index_exists()
 
@@ -381,7 +380,11 @@ class ElasticRepository:
         author_id: int | None = None,
     ):
         """Возвращает все тудушки из индекса"""
-        query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
+        query = (
+            {"match_all": {}}
+            if author_id is None
+            else {"term": {"author_id": author_id}}
+        )
         response = await self._client.search(
             index=INDEX_NAME,
             body={
@@ -394,7 +397,11 @@ class ElasticRepository:
         return [hit["_source"] for hit in response["hits"]["hits"]]
 
     async def get_top_words(self, limit: int = 10, author_id: int | None = None):
-        query = {"match_all": {}} if author_id is None else {"term": {"author_id": author_id}}
+        query = (
+            {"match_all": {}}
+            if author_id is None
+            else {"term": {"author_id": author_id}}
+        )
         response = await self._client.search(
             index=INDEX_NAME,
             body={
@@ -402,9 +409,7 @@ class ElasticRepository:
                 "query": query,
                 "aggs": {
                     "top_title": {"terms": {"field": "title.agg", "size": limit}},
-                    "top_details": {
-                        "terms": {"field": "details.agg", "size": limit}
-                    },
+                    "top_details": {"terms": {"field": "details.agg", "size": limit}},
                     "top_file_content": {
                         "terms": {"field": "file_content.agg", "size": limit}
                     },
@@ -428,12 +433,8 @@ class ElasticRepository:
                 words_counter.get(bucket["key"], 0) + bucket["doc_count"]
             )
 
-        sorted_words = sorted(
-            words_counter.items(), key=lambda x: x[1], reverse=True
-        )
-        return [
-            {"word": word, "count": count} for word, count in sorted_words[:limit]
-        ]
+        sorted_words = sorted(words_counter.items(), key=lambda x: x[1], reverse=True)
+        return [{"word": word, "count": count} for word, count in sorted_words[:limit]]
 
     _INTERVAL_FORMATS = {
         "day": "yyyy-MM-dd",
@@ -605,6 +606,7 @@ class ElasticRepository:
         if exists:
             return False
         from datetime import datetime as _dt
+
         await self._client.index(
             index=self.TAGS_INDEX,
             id=doc_id,

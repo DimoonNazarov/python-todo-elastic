@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from app.repository.elastic_repository import create_russian_analyzer_mapping
 from app.constants import ALL_STOPWORDS, CLASSIFICATION_REPLACEMENTS
 from app.services import TodoClassificationService
-from tests.conftest import classification_service
 
 
 def test_russian_analyzer_mapping_contains_classification_filters():
