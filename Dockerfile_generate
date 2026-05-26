@@ -1,9 +1,0 @@
-FROM python:3.12-slim
-
-WORKDIR /code
-
-RUN pip install --no-cache-dir requests
-
-COPY scripts /code/scripts
-
-ENTRYPOINT ["python", "/code/scripts/generate_todos.py", "http://todo-app:8000"]

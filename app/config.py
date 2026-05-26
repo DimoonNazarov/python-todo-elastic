@@ -21,16 +21,19 @@ class Settings(BaseSettings):
     OPENROUTER_MODEL: str = "openrouter/free"
     OPENROUTER_TIMEOUT_SECONDS: int = 60
 
+    # model_config = SettingsConfigDict(
+    #     env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"),
+    #     extra="allow",
+    # )
     model_config = SettingsConfigDict(
-        env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"),
-        extra="allow"
+        env_file=os.getenv("ENV_FILE", ".env"), extra="allow"
     )
 
     @property
     def DATABASE_URL(self) -> str:
         return (
-            f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@"
-            f"{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@"
+            f"{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
 

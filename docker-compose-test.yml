@@ -1,32 +1,42 @@
-version: '3.8'
-
 services:
-  db:
-    image: postgres:latest
-    container_name: test_db
-    env_file:
-      - .env
-    ports:
-      - "6000:5432"
-    volumes:
-      - postgres_data_7:/var/lib/postgresql/data
+  postgres_test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres_test
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
-  test:
+  elasticsearch_test:
+    image: elasticsearch:9.3.0
+    container_name: todo-elastic-test
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9201:9200"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'" ]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  tests:
     build:
       context: .
-    container_name: test_app
-    stdin_open: true
-    tty: true
-    env_file:
-      - .env
-    ports:
-      - "8000:8000"
+      dockerfile: Dockerfile.test
+    environment:
+      ENV_FILE: .env.test
     depends_on:
-      - db
-    volumes:
-      - ./app:/code/app
-      - ./data:/code/data
-      - ./scripts:/code/scripts
-      - ./images:/code/images
-volumes:
-  postgres_data_7:
+      postgres_test:
+        condition: service_healthy
+      elasticsearch_test:
+        condition: service_healthy
+    command: pytest -v

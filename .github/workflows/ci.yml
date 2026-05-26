@@ -44,7 +44,7 @@ jobs:
           --health-retries 5
 
       elasticsearch:
-        image: elasticsearch:8.15.0
+        image: elasticsearch:9.3.0
         env:
           discovery.type: single-node
           xpack.security.enabled: false

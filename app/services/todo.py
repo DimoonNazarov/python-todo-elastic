@@ -301,6 +301,57 @@ class TodoService:
                 raise SearchSyncException("Не удалось синхронизировать задачу с Elasticsearch.") from exc
             uow_session.add_compensation(uow_session.elastic.delete_todo, todo.id)
 
+    async def get_todos_page(
+        self,
+        uow_session: UnitOfWork,
+        current_user: SUserInfo,
+        limit: int,
+        skip: int,
+        created_from: str | None,
+        created_to: str | None,
+        tag: str | None,
+        query: str | None,
+        search_tag: str | None,
+        search_date_from: str | None,
+    ) -> dict:
+        """
+        Возвращает страницу задач для отображения.
+
+        При наличии любого поискового параметра (query / search_tag /
+        search_date_from) делегирует поиск в Elasticsearch через SearchService,
+        иначе отдаёт обычный список с пагинацией и фильтрами.
+        """
+        if query or search_tag or search_date_from:
+            return await self._search_service.search_todos(
+                uow_session=uow_session,
+                current_user=current_user,
+                limit=limit,
+                skip=skip,
+                tag=tag,
+                query=query,
+                search_tag=search_tag,
+                search_date_from=search_date_from,
+            )
+
+        todos, skip, pages, total = await self.get_todos(
+            uow_session=uow_session,
+            current_user=current_user,
+            limit=limit,
+            skip=skip,
+            created_from=created_from,
+            created_to=created_to,
+            tag=tag,
+        )
+
+        return {
+            "todos": todos,
+            "skip": skip,
+            "pages": pages,
+            "total": total,
+            "search_mode": None,
+            "subtitle": None,
+        }
+
     async def get_todos(
         self,
         uow_session: UnitOfWork,
@@ -310,7 +361,7 @@ class TodoService:
         created_from: str | None,
         created_to: str | None,
         tag: str | None,
-    ) -> tuple[Sequence[TodoORM], int, int]:
+    ) -> tuple[Sequence[TodoORM], int, int, int]:
         """Получает список задач с пагинацией и фильтрами."""
         created_from = self._parse_data(created_from)
         created_to = self._parse_data(created_to)
@@ -337,7 +388,7 @@ class TodoService:
                 author_id=author_id,
             )
 
-        return self._classification.enrich_list(todos), skip, pages
+        return self._classification.enrich_list(todos), skip, pages, count
 
     async def update(
         self,
