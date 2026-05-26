@@ -87,10 +87,7 @@ class AuthRepository:
             update_dict: Данные для обновления
         """
         stmt = (
-            update(User)
-            .where(User.id == user_id)
-            .values(**update_dict)
-            .execution_options(synchronize_session="fetch")
+            update(User).where(User.id == user_id).values(**update_dict).execution_options(synchronize_session="fetch")
         )
         result = await self._session.execute(stmt)
         return result.rowcount > 0

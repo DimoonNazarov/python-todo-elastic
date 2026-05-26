@@ -47,15 +47,15 @@ def _remove_title_duplication(title: str | None, summary: str) -> str:
     if not title or not summary:
         return summary
 
-    normalized_title = _normalize_text(title).strip(' "\'«»').lower()
+    normalized_title = _normalize_text(title).strip(" \"'«»").lower()
     normalized_summary = _normalize_text(summary)
-    normalized_summary_plain = normalized_summary.strip(' "\'«»')
+    normalized_summary_plain = normalized_summary.strip(" \"'«»")
 
     if normalized_summary_plain.lower() == normalized_title:
         return normalized_summary
 
     for pattern in (
-        rf'^\s*{re.escape(title)}\s*[:\-]\s*',
+        rf"^\s*{re.escape(title)}\s*[:\-]\s*",
         rf'^\s*[«"]?{re.escape(title)}[»"]?\s*[:\-–—,]?\s*',
     ):
         normalized_summary = re.sub(pattern, "", normalized_summary, count=1, flags=re.IGNORECASE)
@@ -119,9 +119,7 @@ def _build_regex_summary(text: str, max_sentences: int) -> str:
         ranked_sentences.append((score, index, sentence))
 
     if not ranked_sentences:
-        informative_sentences = [
-            sentence for sentence in sentences if _is_informative_sentence(sentence)
-        ]
+        informative_sentences = [sentence for sentence in sentences if _is_informative_sentence(sentence)]
         if informative_sentences:
             return " ".join(informative_sentences[:max_sentences])
         return " ".join(sentences[:max_sentences])
