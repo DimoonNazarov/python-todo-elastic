@@ -3,6 +3,7 @@ import os
 from typing import AsyncGenerator
 import pytest
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from elasticsearch import AsyncElasticsearch
@@ -34,11 +35,10 @@ def es_client():
     return AsyncElasticsearch(hosts=[ES_HOST])
 
 
-# Fixture для сервиса классификации
 @pytest.fixture(scope="session")
 def classification_service() -> TodoClassificationService:
     """Возвращает экземпляр TodoClassificationService для тестов."""
-    return TodoClassificationService()  # Fixture для сервиса классификации
+    return TodoClassificationService()
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -50,13 +50,16 @@ async def prepare_database():
         await conn.run_sync(Base.metadata.drop_all)
 
 
-# Очистка таблиц между тестами
 @pytest.fixture(autouse=True)
 async def clean_tables():
     yield
     async with engine_test.begin() as conn:
-        for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(table.delete())
+        table_names = ", ".join(
+            f'"{table.name}"' for table in Base.metadata.sorted_tables
+        )
+        await conn.execute(
+            text(f"TRUNCATE TABLE {table_names} RESTART IDENTITY CASCADE")
+        )
 
 
 @pytest.fixture(scope="session")

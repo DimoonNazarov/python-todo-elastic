@@ -2,10 +2,6 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 async def _register_and_login(
     ac: AsyncClient,
@@ -50,19 +46,11 @@ async def _add_todo(
 
 @pytest.fixture
 async def user_client(ac: AsyncClient) -> AsyncClient:
-    """Клиент авторизованного обычного пользователя.
-
-    Function-scope: фикстура clean_tables очищает БД после каждого теста,
-    поэтому пользователя нужно регистрировать заново на каждый тест,
-    иначе get_current_active_user вернёт 403 (пользователь удалён).
-    """
     return await _register_and_login(ac, "todo_user@example.com")
 
 
 @pytest.fixture(scope="module")
 async def second_client(ac: AsyncClient) -> AsyncClient:
-    """Клиент второго пользователя (для проверки 403)."""
-    # Первый пользователь (admin) должен быть уже создан — регистрируем второго
     async with AsyncClient(transport=ac._transport, base_url="http://test") as client:
         return await _register_and_login(client, "todo_user2@example.com")
 
@@ -128,12 +116,8 @@ async def test_list_todos_filter_by_tag(user_client: AsyncClient):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_edit_todo_success(user_client: AsyncClient):
-    # Создаём задачу
     await _add_todo(user_client, "Задача для редактирования")
 
-    # Получаем список, чтобы найти id — через API нет прямого эндпоинта,
-    # поэтому создаём и сразу редактируем последнюю (id=1 при чистой БД)
-    # В реальных тестах лучше парсить ответ или добавить GET /api/todos/
     response = await user_client.put(
         "/todo/edit/1/",
         data={
@@ -150,6 +134,8 @@ async def test_edit_todo_success(user_client: AsyncClient):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_edit_todo_mark_completed(user_client: AsyncClient):
+    await _add_todo(user_client, "Задача для отметки выполнения")
+
     response = await user_client.put(
         "/todo/edit/1/",
         data={
