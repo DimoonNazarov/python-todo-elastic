@@ -18,7 +18,18 @@ engine_test = create_async_engine(get_db_url(), poolclass=NullPool)
 async_session_maker = async_sessionmaker(engine_test, expire_on_commit=False)
 
 Base.metadata.bind = engine_test
-ES_HOST = f"http://{settings.ELASTICSEARCH_HOST}:{settings.ELASTICSEARCH_PORT}"
+
+
+def _build_es_host() -> str:
+    # CI передаёт ELASTICSEARCH_HOST уже как полный URL (http://localhost:9200),
+    # а локальный .env.test — как голый хост (elasticsearch_test) + отдельный порт.
+    host = settings.ELASTICSEARCH_HOST
+    if host.startswith(("http://", "https://")):
+        return host
+    return f"http://{host}:{settings.ELASTICSEARCH_PORT}"
+
+
+ES_HOST = _build_es_host()
 
 
 async def override_get_async_uow_session():
