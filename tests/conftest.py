@@ -11,14 +11,15 @@ from elasticsearch import AsyncElasticsearch
 from app.core import get_async_uow_session, UnitOfWork
 from app.models import Base
 from app.main import app
-from app.config import get_db_url
+from app.config import get_db_url, settings
+from app.repository.elastic_repository import ElasticRepository, INDEX_NAME
 from app.services import TodoClassificationService
 
 engine_test = create_async_engine(get_db_url(), poolclass=NullPool)
 async_session_maker = async_sessionmaker(engine_test, expire_on_commit=False)
 
 Base.metadata.bind = engine_test
-ES_HOST = os.getenv("ELASTICSEARCH_HOST", "http://localhost:9201")
+ES_HOST = f"http://{settings.ELASTICSEARCH_HOST}:{settings.ELASTICSEARCH_PORT}"
 
 
 async def override_get_async_uow_session():
@@ -48,6 +49,24 @@ async def prepare_database():
     yield
     async with engine_test.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+
+
+@pytest.fixture(autouse=True, scope="session")
+async def prepare_elasticsearch():
+    """Создаёт индекс с маппингом до тестов.
+
+    В приложении это делает lifespan, но httpx ASGITransport его не запускает,
+    поэтому индекс нужно создать здесь явно (иначе ES-зависимые тесты падают).
+    """
+    es = AsyncElasticsearch(hosts=[ES_HOST])
+    repo = ElasticRepository(es)
+    # Чистый старт на случай оставшегося индекса от прошлого прогона.
+    await es.options(ignore_status=[404]).indices.delete(index=INDEX_NAME)
+    await repo.ensure_index_exists()
+    await repo.ensure_file_content_field()
+    yield
+    await es.options(ignore_status=[404]).indices.delete(index=INDEX_NAME)
+    await es.close()
 
 
 @pytest.fixture(autouse=True)

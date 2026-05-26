@@ -1,14 +1,13 @@
-"""Database for todo
-"""
+"""Database for todo"""
+
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine
 from typing import AsyncGenerator
 
 from elasticsearch import AsyncElasticsearch
 
-from app.config import get_db_url
+from app.config import get_db_url, settings
 from app.core.uow import UnitOfWork
-
 
 _es_client: AsyncElasticsearch | None = None
 
@@ -16,7 +15,8 @@ _es_client: AsyncElasticsearch | None = None
 def get_es_client() -> AsyncElasticsearch:
     global _es_client
     if _es_client is None:
-        _es_client = AsyncElasticsearch(hosts=["http://elasticsearch:9200"])
+        hosts = [f"http://{settings.ELASTICSEARCH_HOST}:{settings.ELASTICSEARCH_PORT}"]
+        _es_client = AsyncElasticsearch(hosts=hosts)
     return _es_client
 
 

@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
 
+    ELASTICSEARCH_HOST: str = "elasticsearch"
+    ELASTICSEARCH_PORT: int = 9200
+
     JWT_SECRET_KEY: str = "your-secret-key"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
