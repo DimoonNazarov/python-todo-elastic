@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
 
-    ELASTICSEARCH_HOST: str = "elasticsearch"
+    ELASTICSEARCH_HOST: str = "todo-elasticsearch"
     ELASTICSEARCH_PORT: int = 9200
 
     JWT_SECRET_KEY: str = "your-secret-key"
