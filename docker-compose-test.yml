@@ -1,10 +1,6 @@
 services:
   postgres_test:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres_test
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
@@ -33,7 +29,7 @@ services:
       context: .
       dockerfile: Dockerfile.test
     environment:
-      ENV_FILE: .env.test
+      ENV_FILE: .env
     depends_on:
       postgres_test:
         condition: service_healthy

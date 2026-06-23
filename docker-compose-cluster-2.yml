@@ -1,0 +1,27 @@
+  services:
+    es03:
+      image: elasticsearch:9.3.0
+      container_name: es03
+      network_mode: host          # ← проще всего на Linux: нода видит реальную сеть машины
+      environment:
+        - node.name=es03
+        - cluster.name=todo-cluster
+        - network.host=0.0.0.0
+        - network.publish_host=10.152.118.13   # ← LAN-IP ЭТОЙ машины
+        - http.port=9200
+        - transport.port=9300
+        # перечисляем 9300-порты ВСЕХ нод по их реальным IP:
+        - discovery.seed_hosts=10.152.118.11, 10.152.118.13, 10.152.118.112
+        - cluster.initial_master_nodes=es01,es02,es03
+        - bootstrap.memory_lock=true
+        - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+        - xpack.security.enabled=false
+        - cluster.routing.allocation.disk.threshold_enabled=false
+      ulimits:
+        memlock: { soft: -1, hard: -1 }
+      volumes:
+        - esdata:/usr/share/elasticsearch/data
+      restart: unless-stopped
+
+  volumes:
+    esdata:
