@@ -23,7 +23,8 @@ from app.exceptions import (
 from app.repository.elastic_repository import ElasticRepository
 from app.routers import (
     todo_router,
-    auth_router
+    auth_router,
+    comment_router,
 )
 from app.routers.exception_handlers import (
     invalid_credentials_handler,
@@ -68,6 +69,7 @@ async def main_page():
 
 app.include_router(todo_router)
 app.include_router(auth_router)
+app.include_router(comment_router)
 
 create_dirs()
 

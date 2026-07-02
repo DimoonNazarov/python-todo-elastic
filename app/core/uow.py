@@ -10,6 +10,8 @@ from app.repository.todo_repository import TodoRepository
 from app.repository.auth_repository import AuthRepository
 from app.repository.elastic_repository import ElasticRepository
 from app.repository.token_repository import TokenRepository
+from app.repository.comment_repository import CommentRepository
+from app.repository.notification_repository import NotificationRepository
 
 logger = getLogger(__name__)
 
@@ -72,3 +74,11 @@ class UnitOfWork:
     @property
     def token(self) -> TokenRepository:
         return TokenRepository(self._session)
+
+    @property
+    def comment(self) -> CommentRepository:
+        return CommentRepository(self._session)
+
+    @property
+    def notification(self) -> NotificationRepository:
+        return NotificationRepository(self._session)

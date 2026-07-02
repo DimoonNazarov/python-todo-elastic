@@ -59,7 +59,7 @@ class TodoService:
         action: str,
     ) -> TodoEditHistory:
         """Создаёт запись в истории изменений задачи с фиксацией всех значимых полей."""
-        edited_at = todo.updated_at or datetime.now(UTC)
+        edited_at = todo.updated_at or todo.created_at or datetime.now(UTC)
         return TodoEditHistory(
             todo_id=todo.id,
             editor_id=editor_id,
@@ -74,6 +74,7 @@ class TodoService:
             image_path=todo.image_path,
             spacy_summary=todo.spacy_summary,
             llm_summary=todo.llm_summary,
+            file_path=todo.file_path,
         )
 
     @staticmethod
@@ -295,6 +296,8 @@ class TodoService:
 
             await uow_session.todo.add(todo)
             await uow_session.flush()
+            # Начальный снапшот: без него первой правке не с чем сравниваться в diff
+            await uow_session.todo.add_edit_history(self._build_todo_history_entry(todo, author_id, "create"))
             try:
                 await self._search_service.index_todo(uow_session=uow_session, todo=todo, file_content=file_content)
             except Exception as exc:
@@ -628,18 +631,17 @@ class TodoService:
         uow_session: UnitOfWork,
         todo_id: int,
         user: SUserInfo,
-    ) -> tuple[TodoORM, list]:
-        """Возвращает задачу для редактирования вместе со списком доступных изображений."""
+    ) -> tuple[TodoORM, list, bool]:
+        """Возвращает задачу, список изображений и флаг can_edit."""
         async with uow_session.start():
             todo = await uow_session.todo.get_todo_by_id(todo_id)
             if not todo:
                 raise NotFoundException(f"Not found todo by this id: {todo_id}")
 
             images = await uow_session.todo.get_all_image_paths()
-            if user.role != UserRole.ADMIN and todo.author_id != user.id:
-                raise ForbiddenException("Вы можете редактировать только свои задачи")
+            can_edit = user.role == UserRole.ADMIN or todo.author_id == user.id
 
-        return todo, images
+        return todo, images, can_edit
 
     async def delete(self, uow_session: UnitOfWork, todo_id: int, current_user: SUserInfo) -> TodoORM:
         """Удаление todo с проверкой владельца."""

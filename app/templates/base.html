@@ -748,6 +748,21 @@
             <div class="app-topbar">
                 <h1 class="h1 app-title"><a href="/todo/home/">ToDo</a> - список задач</h1>
 
+                <!-- Колокольчик уведомлений -->
+                <div class="notification-bell-wrap position-relative me-2" id="notifWrap" style="display:none">
+                    <button type="button" class="btn btn-outline-secondary btn-sm position-relative" id="notifBtn" title="Уведомления">
+                        🔔
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" id="notifBadge">0</span>
+                    </button>
+                    <div id="notifPanel" class="d-none shadow rounded-3 bg-white border" style="position:absolute;top:110%;right:0;min-width:320px;max-height:400px;overflow-y:auto;z-index:9999">
+                        <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                            <strong class="small">Уведомления</strong>
+                            <button class="btn btn-link btn-sm p-0 text-muted" id="markAllReadBtn">Прочитать все</button>
+                        </div>
+                        <div id="notifList" class="p-2"></div>
+                    </div>
+                </div>
+
                 <div class="user-menu">
                     <button
                         type="button"
@@ -1115,6 +1130,83 @@
     });
 
     loadUserMenu();
+</script>
+<script>
+    // ===== Уведомления =====
+    (function () {
+        const notifWrap = document.getElementById('notifWrap');
+        const notifBtn = document.getElementById('notifBtn');
+        const notifBadge = document.getElementById('notifBadge');
+        const notifPanel = document.getElementById('notifPanel');
+        const notifList = document.getElementById('notifList');
+        const markAllReadBtn = document.getElementById('markAllReadBtn');
+
+        if (!notifWrap) return;
+
+        const TYPE_LABELS = { mention: 'Упоминание', reply: 'Ответ на комментарий' };
+
+        async function loadNotifications() {
+            try {
+                const r = await fetchWithAuth('/api/notifications/');
+                if (!r.ok) return;
+                const items = await r.json();
+                const unread = items.filter(n => !n.is_read).length;
+
+                if (unread > 0) {
+                    notifBadge.textContent = unread > 99 ? '99+' : unread;
+                    notifBadge.classList.remove('d-none');
+                } else {
+                    notifBadge.classList.add('d-none');
+                }
+                notifWrap.style.display = '';
+
+                notifList.innerHTML = '';
+                if (items.length === 0) {
+                    notifList.innerHTML = '<p class="text-muted small p-2 mb-0">Уведомлений нет</p>';
+                    return;
+                }
+                items.forEach(n => {
+                    const div = document.createElement('div');
+                    div.className = `p-2 rounded mb-1 ${n.is_read ? 'text-muted' : 'bg-light'}`;
+                    div.style.cursor = 'pointer';
+                    div.innerHTML = `
+                        <div class="d-flex justify-content-between">
+                            <small class="fw-semibold">${TYPE_LABELS[n.type] || n.type}</small>
+                            <small class="text-muted">${n.is_read ? '' : '●'}</small>
+                        </div>
+                        <div class="small">${n.todo_title ? `<a href="/todo/edit/${n.todo_id}/">«${n.todo_title}»</a>` : ''}</div>
+                        ${n.author_email ? `<div class="small text-muted">${n.author_email}</div>` : ''}
+                        ${n.comment_preview ? `<div class="small fst-italic text-truncate">${n.comment_preview}</div>` : ''}
+                    `;
+                    div.addEventListener('click', async () => {
+                        if (!n.is_read) {
+                            await fetchWithAuth(`/api/notifications/${n.id}/read/`, {method: 'POST'});
+                            await loadNotifications();
+                        }
+                        window.location.href = `/todo/edit/${n.todo_id}/`;
+                    });
+                    notifList.appendChild(div);
+                });
+            } catch {}
+        }
+
+        notifBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            notifPanel.classList.toggle('d-none');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!notifWrap.contains(e.target)) notifPanel.classList.add('d-none');
+        });
+
+        markAllReadBtn.addEventListener('click', async () => {
+            await fetchWithAuth('/api/notifications/read-all/', {method: 'POST'});
+            await loadNotifications();
+        });
+
+        loadNotifications();
+        setInterval(loadNotifications, 30000);
+    })();
 </script>
 
 </body>
