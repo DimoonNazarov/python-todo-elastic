@@ -179,6 +179,15 @@ class TodoRepository:
         )
         return result.scalars().all()
 
+    async def get_pending_todos_by_author_id(self, author_id: int) -> Sequence[Todo]:
+        """Невыполненные todo пользователя (ближайший срок — первым)."""
+        result = await self._session.execute(
+            select(Todo)
+            .where(and_(Todo.author_id == author_id, Todo.completed.is_(False)))
+            .order_by(Todo.due_at.asc().nulls_last(), desc(Todo.id))
+        )
+        return result.scalars().all()
+
     async def delete_by_author_id(self, author_id: int) -> None:
         """Удалить все todo пользователя"""
         todo_ids_query = select(Todo.id).where(Todo.author_id == author_id)

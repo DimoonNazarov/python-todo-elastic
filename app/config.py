@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     OPENROUTER_MODEL: str = "openrouter/free"
     OPENROUTER_TIMEOUT_SECONDS: int = 60
 
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_BOT_USERNAME: str = ""  # если пусто — берётся через getMe
+    TELEGRAM_API_BASE_URL: str = "https://api.telegram.org"
+    TELEGRAM_TIMEOUT_SECONDS: int = 30
+    TELEGRAM_LINK_TTL_MINUTES: int = 15
+
     # model_config = SettingsConfigDict(
     #     env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"),
     #     extra="allow",

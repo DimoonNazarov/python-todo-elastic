@@ -6,6 +6,7 @@ from app.services import (
     TodoService,
     OpenRouterService,
     TodoClassificationService,
+    TelegramService,
 )
 from app.services.search import SearchService
 
@@ -13,6 +14,11 @@ from app.services.search import SearchService
 def get_auth_service() -> AuthService:
     """Возвращает сервис аутентификации."""
     return AuthService()
+
+
+def get_telegram_service() -> TelegramService:
+    """Возвращает сервис работы с Telegram Bot API."""
+    return TelegramService()
 
 
 def get_openrouter_service() -> OpenRouterService:

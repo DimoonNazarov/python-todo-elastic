@@ -8,7 +8,7 @@ from app.routers.dependencies import get_current_active_user
 from app.schemas.comment import CommentCreate, CommentResponse, NotificationResponse
 from app.schemas.user import SUserInfo
 from app.services.comment import CommentService
-from app.services.websocket_manager import manager
+from app.services.websocket_manager import manager, TODOS_FEED_CHANNEL
 
 logger = logging.getLogger(__name__)
 
@@ -118,3 +118,14 @@ async def websocket_comments(todo_id: int, websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(todo_id, websocket)
+
+
+@comment_router.websocket("/ws/todos/")
+async def websocket_todos_feed(websocket: WebSocket):
+    """Канал страницы списка задач (например, выполнение задачи из Telegram)."""
+    await manager.connect(TODOS_FEED_CHANNEL, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(TODOS_FEED_CHANNEL, websocket)

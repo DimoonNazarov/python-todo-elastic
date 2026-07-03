@@ -58,3 +58,15 @@ class InvalidTodoDataException(AppException):
 
 class SearchSyncException(AppException):
     pass
+
+
+class TelegramConfigurationException(AppException):
+    pass
+
+
+class TelegramServiceException(AppException):
+    pass
+
+
+class TelegramNotLinkedException(AppException):
+    pass
