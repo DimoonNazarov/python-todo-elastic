@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
+{% if can_edit %}
 <form id="todoForm" class="d-flex flex-column gap-2">
     <h2 class="h2">Редактирование задачи</h2>
 
@@ -97,7 +98,9 @@
                                 {% endif %}
                             </div>
                             <div class="history-entry-action history-entry-action--{{ entry.action }}">
-                                {% if entry.action == 'edit' %}
+                                {% if entry.action == 'create' %}
+                                Создание заметки
+                                {% elif entry.action == 'edit' %}
                                 Изменение заметки
                                 {% elif entry.action == 'spacy_summary' %}
                                 Формирование spaCy-реферата
@@ -116,8 +119,22 @@
                         <div><strong>Заголовок:</strong> {{ entry.title }}</div>
                         <div><strong>Тег:</strong> {{ entry.tag or '—' }}</div>
                         <div><strong>Статус:</strong> {% if entry.completed %}Выполнено{% else %}Не выполнено{% endif %}</div>
-                        <div class="mt-2"><strong>Описание:</strong></div>
-                        <div class="history-entry-description text-muted">{{ entry.details }}</div>
+                        <div class="mt-2 d-flex align-items-center gap-2">
+                            <strong>Описание:</strong>
+                            {% if not loop.last %}
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 diff-toggle-btn"
+                                    data-idx="{{ loop.index0 }}">diff</button>
+                            {% endif %}
+                        </div>
+                        <div class="history-entry-description text-muted entry-text" data-idx="{{ loop.index0 }}"
+                             data-title="{{ entry.title | e }}" data-tag="{{ (entry.tag or '') | e }}"
+                             data-completed="{{ '1' if entry.completed else '0' }}"
+                             data-image="{{ (entry.image_path or '') | e }}"
+                             data-file="{{ (entry.file_path or '') | e }}"
+                             data-spacy="{{ (entry.spacy_summary or '') | e }}"
+                             data-llm="{{ (entry.llm_summary or '') | e }}"
+                             data-details="{{ entry.details | e }}">{{ entry.details }}</div>
+                        <div class="diff-view d-none mt-2" data-idx="{{ loop.index0 }}"></div>
                     </div>
                 </div>
                 {% endfor %}
@@ -216,6 +233,109 @@
 
     <button type="submit" class="btn btn-success" data-todo-image="{{ todo.image_path }}">Сохранить</button>
 </form>
+{% else %}
+<div class="d-flex flex-column gap-2">
+    <h2 class="h2">Просмотр задачи</h2>
+
+    <div class="form-floating">
+        <input type="text" class="form-control" readonly value="{{ todo.display_title }}">
+        <label>Название</label>
+    </div>
+
+    <div>
+        <textarea class="form-control" rows="4" readonly>{{ todo.display_details or '' }}</textarea>
+    </div>
+
+    {% if todo.classification_level %}
+    <div class="alert alert-warning" role="alert">
+        Обнаружен гриф секретности: "{{ todo.classification_level }}". В форме показан замаскированный текст.
+    </div>
+    {% endif %}
+
+    <div class="d-flex gap-3 text-muted small">
+        <span>Тег: <strong>{{ todo.tag or '—' }}</strong></span>
+        <span>Статус: <strong>{% if todo.completed %}Выполнено{% else %}Не выполнено{% endif %}</strong></span>
+        <span>Создано: <strong>{{ todo.created_at.strftime('%Y-%m-%d %H:%M') }}</strong></span>
+    </div>
+
+    {% if todo.image_path %}
+    <img src="{{ url_for('images', path=todo.image_path) }}" style="max-width: 100%; margin-top: 10px;" alt="todo">
+    {% endif %}
+
+    <div class="card mt-2">
+        <div class="card-body">
+            <h4 class="h5 mb-3">История изменений</h4>
+            {% if todo.edit_history %}
+            <div class="history-scroll d-flex flex-column gap-3 pe-2">
+                {% for entry in todo.edit_history|sort(attribute='edited_at', reverse=true) %}
+                <div class="history-entry border rounded-3 p-3">
+                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                        <div>
+                            <div class="history-entry-step text-muted small mb-2">
+                                Изменение {{ loop.index }} из {{ todo.edit_history | length }}
+                            </div>
+                            <div class="history-entry-email fw-semibold">
+                                {% if entry.editor %}{{ entry.editor.email }}
+                                {% elif entry.editor_id %}Пользователь ID {{ entry.editor_id }}
+                                {% else %}Пользователь удалён{% endif %}
+                            </div>
+                        </div>
+                        <div class="history-entry-time text-muted small">
+                            {{ entry.edited_at.strftime('%Y-%m-%d %H:%M:%S') if entry.edited_at else '—' }}
+                        </div>
+                    </div>
+                    <div class="history-entry-content mt-3 small">
+                        <div><strong>Заголовок:</strong> {{ entry.title }}</div>
+                        <div class="mt-2 d-flex align-items-center gap-2">
+                            <strong>Описание:</strong>
+                            {% if not loop.last %}
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 diff-toggle-btn"
+                                    data-idx="{{ loop.index0 }}">diff</button>
+                            {% endif %}
+                        </div>
+                        <div class="history-entry-description text-muted entry-text" data-idx="{{ loop.index0 }}"
+                             data-title="{{ entry.title | e }}" data-tag="{{ (entry.tag or '') | e }}"
+                             data-completed="{{ '1' if entry.completed else '0' }}"
+                             data-image="{{ (entry.image_path or '') | e }}"
+                             data-file="{{ (entry.file_path or '') | e }}"
+                             data-spacy="{{ (entry.spacy_summary or '') | e }}"
+                             data-llm="{{ (entry.llm_summary or '') | e }}"
+                             data-details="{{ entry.details | e }}">{{ entry.details }}</div>
+                        <div class="diff-view d-none mt-2" data-idx="{{ loop.index0 }}"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-muted">История изменений пока отсутствует.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Секция комментариев -->
+<div class="card mt-4" id="commentsSection">
+    <div class="card-body">
+        <h4 class="h5 mb-3">Комментарии</h4>
+
+        <div id="commentsList" class="d-flex flex-column gap-3 mb-3"></div>
+
+        <form id="commentForm" class="mt-3">
+            <input type="hidden" id="replyToId" value="">
+            <div id="replyBadge" class="d-none mb-2">
+                <span class="badge bg-secondary">Ответ на комментарий</span>
+                <button type="button" class="btn-close btn-sm ms-1" id="cancelReplyBtn" aria-label="Отмена"></button>
+            </div>
+            <div class="input-group">
+                <textarea class="form-control" id="commentContent" rows="2" maxlength="2000"
+                          placeholder="Напишите комментарий... (используйте @email для упоминания)"></textarea>
+                <button class="btn btn-primary" type="submit">Отправить</button>
+            </div>
+            <div class="form-text text-muted">Используйте @email@example.com для уведомления пользователя</div>
+        </form>
+    </div>
+</div>
 
 <div class="mt-3" id="tagLinksContainer">
     <h4>Перейти к задачам типа:</h4>
@@ -308,6 +428,11 @@
         line-height: 1.2;
     }
 
+    .history-entry-action--create {
+        background: #fff4e0;
+        color: #b07a2a;
+    }
+
     .history-entry-action--edit {
         background: #e7f1ff;
         color: #3f6fb8;
@@ -322,8 +447,28 @@
         background: #f1ebff;
         color: #7a52c7;
     }
+
+    /* Diff */
+    .diff-line { font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; padding: 1px 4px; }
+    .diff-line.diff-add { background: #e6ffed; color: #24292f; }
+    .diff-line.diff-del { background: #ffebe9; color: #24292f; text-decoration: line-through; }
+    .diff-line.diff-ctx { color: #6e7781; }
+    .diff-line.diff-hdr { background: #ddf4ff; color: #0969da; font-weight: 600; margin-top: 4px; }
+    .diff-thumb { max-height: 80px; border-radius: 6px; border: 2px solid transparent; }
+    .diff-thumb-del { border-color: #ff8182; opacity: 0.7; }
+    .diff-thumb-add { border-color: #4ac26b; }
+
+    /* Comments */
+    .comment-card { background: rgba(255,255,255,0.8); border-radius: 12px; border: 1px solid rgba(0,0,0,.08); }
+    .comment-reply { margin-left: 2rem; border-left: 3px solid rgba(103, 126, 234, 0.3); padding-left: 0.75rem; }
+    .comment-author { font-weight: 600; font-size: 0.85rem; color: #3f4a6f; }
+    .comment-time { font-size: 0.75rem; color: #888; }
+    .comment-content { font-size: 0.9rem; white-space: pre-wrap; word-break: break-word; }
+    .comment-deleted { color: #aaa; font-style: italic; }
+    .mention { color: #0d6efd; font-weight: 500; }
 </style>
 
+{% if can_edit %}
 <script>
     const titleInput = document.getElementById('title');
     const detailsInput = document.getElementById('details');
@@ -711,5 +856,230 @@
                 container.appendChild(a);
             });
         });
+</script>
+{% endif %}
+
+<script>
+    // ===== DIFF в истории =====
+    (function () {
+        const entries = [...document.querySelectorAll('.entry-text[data-idx]')];
+        // entries[0] = самое свежее изменение (reverse=true в шаблоне)
+        // diff показываем между entry[i] и entry[i+1] (следующий = более старый)
+        document.querySelectorAll('.diff-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const idx = parseInt(this.dataset.idx);
+                const diffEl = document.querySelector(`.diff-view[data-idx="${idx}"]`);
+                if (!diffEl.classList.contains('d-none')) {
+                    diffEl.classList.add('d-none');
+                    this.textContent = 'diff';
+                    return;
+                }
+                const curr = entries[idx];
+                const prev = entries[idx + 1];
+                if (!prev) return;
+                diffEl.innerHTML = buildEntryDiff(prev.dataset, curr.dataset);
+                diffEl.classList.remove('d-none');
+                this.textContent = 'скрыть';
+            });
+        });
+
+        function buildEntryDiff(prev, curr) {
+            let html = '';
+            html += fieldDiff('Заголовок', prev.title, curr.title);
+            html += fieldDiff('Тег', prev.tag, curr.tag);
+            html += fieldDiff('Статус', statusLabel(prev.completed), statusLabel(curr.completed));
+            if (prev.image !== curr.image) {
+                html += fieldDiff('Изображение', prev.image, curr.image);
+                html += imagePreview(prev.image, curr.image);
+            }
+            html += fieldDiff('Файл', prev.file, curr.file);
+            html += sectionDiff('Описание', prev.details, curr.details);
+            html += sectionDiff('spaCy-реферат', prev.spacy, curr.spacy);
+            html += sectionDiff('OpenRouter-реферат', prev.llm, curr.llm);
+            return html || '<span class="text-muted">Изменений нет</span>';
+        }
+
+        function statusLabel(v) {
+            return v === '1' ? 'Выполнено' : 'Не выполнено';
+        }
+
+        function fieldDiff(label, oldVal, newVal) {
+            if (oldVal === newVal) return '';
+            return `<div class="diff-line diff-del">-&nbsp;${label}: ${esc(oldVal || '—')}</div>` +
+                   `<div class="diff-line diff-add">+&nbsp;${label}: ${esc(newVal || '—')}</div>`;
+        }
+
+        function imagePreview(oldPath, newPath) {
+            const img = (path, cls) => path
+                ? `<img src="/images/${encodeURIComponent(path)}" class="diff-thumb ${cls}" alt="" loading="lazy">`
+                : '';
+            return `<div class="d-flex gap-2 my-1">${img(oldPath, 'diff-thumb-del')}${img(newPath, 'diff-thumb-add')}</div>`;
+        }
+
+        function sectionDiff(label, oldText, newText) {
+            if (oldText === newText) return '';
+            return `<div class="diff-line diff-hdr">@@ ${label} @@</div>` + buildDiff(oldText, newText);
+        }
+
+        function buildDiff(oldText, newText) {
+            const oldLines = oldText.split('\n');
+            const newLines = newText.split('\n');
+            const lcs = computeLCS(oldLines, newLines);
+            let o = 0, n = 0, l = 0, html = '';
+            while (o < oldLines.length || n < newLines.length) {
+                if (l < lcs.length && o < oldLines.length && n < newLines.length &&
+                    oldLines[o] === lcs[l] && newLines[n] === lcs[l]) {
+                    html += `<div class="diff-line diff-ctx">&nbsp;${esc(oldLines[o])}</div>`;
+                    o++; n++; l++;
+                } else if (n < newLines.length && (l >= lcs.length || newLines[n] !== lcs[l])) {
+                    html += `<div class="diff-line diff-add">+&nbsp;${esc(newLines[n])}</div>`;
+                    n++;
+                } else {
+                    html += `<div class="diff-line diff-del">-&nbsp;${esc(oldLines[o])}</div>`;
+                    o++;
+                }
+            }
+            return html || '<span class="text-muted">Изменений нет</span>';
+        }
+
+        function computeLCS(a, b) {
+            const m = a.length, n = b.length;
+            const dp = Array.from({length: m + 1}, () => new Array(n + 1).fill(0));
+            for (let i = 1; i <= m; i++)
+                for (let j = 1; j <= n; j++)
+                    dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+            const result = [];
+            let i = m, j = n;
+            while (i > 0 && j > 0) {
+                if (a[i-1] === b[j-1]) { result.unshift(a[i-1]); i--; j--; }
+                else if (dp[i-1][j] > dp[i][j-1]) i--;
+                else j--;
+            }
+            return result;
+        }
+
+        function esc(s) {
+            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+    })();
+
+    // ===== КОММЕНТАРИИ =====
+    const TODO_ID = {{ todo.id }};
+    const commentsList = document.getElementById('commentsList');
+    const commentForm = document.getElementById('commentForm');
+    const commentContent = document.getElementById('commentContent');
+    const replyToId = document.getElementById('replyToId');
+    const replyBadge = document.getElementById('replyBadge');
+    const cancelReplyBtn = document.getElementById('cancelReplyBtn');
+
+    function formatMentions(text) {
+        const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        return escaped.replace(/@([\w.+\-]+@[\w.\-]+\.\w+)/g, '<span class="mention">@$1</span>');
+    }
+
+    function timeAgo(isoStr) {
+        const d = new Date(isoStr);
+        const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+        if (diff < 60) return 'только что';
+        if (diff < 3600) return `${Math.floor(diff / 60)} мин. назад`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)} ч. назад`;
+        return d.toLocaleDateString('ru-RU');
+    }
+
+    function buildCommentEl(c, isReply = false) {
+        const div = document.createElement('div');
+        div.className = `comment-card p-3${isReply ? ' comment-reply mt-2' : ''}`;
+        div.dataset.id = c.id;
+
+        const author = c.author ? `${c.author.first_name} ${c.author.last_name} (${c.author.email})` : '?';
+        const content = c.is_deleted
+            ? '<span class="comment-deleted">[удалено]</span>'
+            : `<div class="comment-content mt-1">${formatMentions(c.content)}</div>`;
+
+        div.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <span class="comment-author">${esc(author)}</span>
+                    <span class="comment-time ms-2">${timeAgo(c.created_at)}</span>
+                </div>
+                <div class="d-flex gap-2">
+                    ${!c.is_deleted ? `<button class="btn btn-link btn-sm p-0 reply-btn" data-id="${c.id}">Ответить</button>` : ''}
+                    <button class="btn btn-link btn-sm p-0 text-danger delete-btn" data-id="${c.id}">Удалить</button>
+                </div>
+            </div>
+            ${content}
+            ${!isReply && c.replies && c.replies.length ? '<div class="replies-container mt-2"></div>' : ''}
+        `;
+
+        if (!isReply && c.replies && c.replies.length) {
+            const container = div.querySelector('.replies-container');
+            c.replies.forEach(r => container.appendChild(buildCommentEl(r, true)));
+        }
+
+        div.querySelector('.reply-btn')?.addEventListener('click', () => {
+            replyToId.value = c.id;
+            replyBadge.classList.remove('d-none');
+            commentContent.focus();
+        });
+
+        div.querySelector('.delete-btn').addEventListener('click', async () => {
+            if (!confirm('Удалить комментарий?')) return;
+            await fetchWithAuth(`/todo/${TODO_ID}/comments/${c.id}/`, {method: 'DELETE'});
+            await loadComments();
+        });
+
+        return div;
+    }
+
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    async function loadComments() {
+        const r = await fetchWithAuth(`/todo/${TODO_ID}/comments/`);
+        if (!r.ok) return;
+        const comments = await r.json();
+        commentsList.innerHTML = '';
+        if (comments.length === 0) {
+            commentsList.innerHTML = '<p class="text-muted small">Комментариев пока нет.</p>';
+            return;
+        }
+        comments.forEach(c => commentsList.appendChild(buildCommentEl(c)));
+    }
+
+    cancelReplyBtn.addEventListener('click', () => {
+        replyToId.value = '';
+        replyBadge.classList.add('d-none');
+    });
+
+    commentForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = commentContent.value.trim();
+        if (!text) return;
+        const body = {content: text, parent_id: replyToId.value ? parseInt(replyToId.value) : null};
+        const r = await fetchWithAuth(`/todo/${TODO_ID}/comments/`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) return;
+        commentContent.value = '';
+        replyToId.value = '';
+        replyBadge.classList.add('d-none');
+        await loadComments();
+    });
+
+    // WebSocket для реального времени
+    (function () {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(`${proto}://${location.host}/ws/todo/${TODO_ID}/`);
+        ws.onmessage = async (e) => {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'new_comment' || msg.type === 'delete_comment') {
+                await loadComments();
+            }
+        };
+        ws.onerror = () => {};
+    })();
+
+    loadComments();
 </script>
 {% endblock content %}

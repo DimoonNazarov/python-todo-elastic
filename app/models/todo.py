@@ -61,5 +61,12 @@ class Todo(Base):
         cascade="all, delete-orphan",
     )
 
+    comments = relationship(
+        "Comment",
+        back_populates="todo",
+        cascade="all, delete-orphan",
+        order_by="Comment.created_at",
+    )
+
     def __repr__(self):
         return f"<Todo {self.id}>"

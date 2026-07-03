@@ -481,7 +481,7 @@ async def get_todo(
     skip: int = 0,
 ):
     """Get todo"""
-    todo, images = await todo_service.get_todo_for_edit(
+    todo, images, can_edit = await todo_service.get_todo_for_edit(
         uow_session=uow_session,
         todo_id=todo_id,
         user=user,
@@ -500,6 +500,7 @@ async def get_todo(
             "limit": limit,
             "skip": skip,
             "images": images,
+            "can_edit": can_edit,
         },
     )
 

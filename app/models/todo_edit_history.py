@@ -30,6 +30,7 @@ class TodoEditHistory(Base):
     image_path: Mapped[str | None] = mapped_column(nullable=True, default=None)
     spacy_summary: Mapped[str | None] = mapped_column(nullable=True, default=None)
     llm_summary: Mapped[str | None] = mapped_column(nullable=True, default=None)
+    file_path: Mapped[str | None] = mapped_column(nullable=True, default=None)
 
     todo = relationship("Todo", back_populates="edit_history")
     editor = relationship("User", back_populates="todo_edit_history")

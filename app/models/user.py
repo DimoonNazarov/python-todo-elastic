@@ -57,3 +57,16 @@ class User(Base):
         foreign_keys="[TodoEditHistory.editor_id]",
         back_populates="editor",
     )
+
+    comments = relationship(
+        "Comment",
+        back_populates="author",
+        cascade="all, delete-orphan",
+    )
+
+    notifications = relationship(
+        "Notification",
+        foreign_keys="[Notification.recipient_id]",
+        back_populates="recipient",
+        cascade="all, delete-orphan",
+    )

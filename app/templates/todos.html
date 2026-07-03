@@ -494,16 +494,7 @@
         });
     });
 
-    document.querySelectorAll('a[data-can-edit]').forEach(link => {
-        link.addEventListener('click', function (e) {
-            if (this.dataset.canEdit === 'true') {
-                return;
-            }
-
-            e.preventDefault();
-            showTodoActionMessage('Вы можете редактировать только свои задачи.', 'warning');
-        });
-    });
+    // Переход на страницу задачи разрешён всем — сервер выдаст read-only для чужих задач
 
     document.querySelectorAll('.completedTask').forEach(checkbox => {
         checkbox.addEventListener('change', function () {
