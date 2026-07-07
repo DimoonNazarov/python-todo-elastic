@@ -25,6 +25,7 @@ class Todo(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: datetime | None = None
     due_at: datetime | None = Field(default=None)
+    reminder_sent: bool = Field(default=False)
     source: TodoSource = Field(default=TodoSource.created)
     image_path: str | None = Field(default=None)
     image_hash: str | None = Field(default=None)

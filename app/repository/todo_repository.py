@@ -222,6 +222,24 @@ class TodoRepository:
 
         return groups
 
+    async def get_todos_due_soon(self, now: datetime, threshold: datetime) -> Sequence[Todo]:
+        """Задачи с приближающимся дедлайном, ещё не уведомлённые и не выполненные."""
+        result = await self._session.execute(
+            select(Todo).where(
+                Todo.due_at.isnot(None),
+                Todo.due_at > now,
+                Todo.due_at <= threshold,
+                Todo.completed == False,  # noqa: E712
+                Todo.reminder_sent == False,  # noqa: E712
+            )
+        )
+        return result.scalars().all()
+
+    async def mark_reminder_sent(self, todo_id: int) -> None:
+        await self._session.execute(
+            update(Todo).where(Todo.id == todo_id).values(reminder_sent=True)
+        )
+
     async def is_image_used_by_other_todos(self, image_path: str, exclude_todo_id: int) -> bool:
         """
         Проверить, используется ли изображение другими todo

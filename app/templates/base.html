@@ -1143,7 +1143,7 @@
 
         if (!notifWrap) return;
 
-        const TYPE_LABELS = { mention: 'Упоминание', reply: 'Ответ на комментарий' };
+        const TYPE_LABELS = { mention: 'Упоминание', reply: 'Ответ на комментарий', deadline: 'Приближается дедлайн' };
 
         async function loadNotifications() {
             try {
@@ -1177,6 +1177,7 @@
                         <div class="small">${n.todo_title ? `<a href="/todo/edit/${n.todo_id}/">«${n.todo_title}»</a>` : ''}</div>
                         ${n.author_email ? `<div class="small text-muted">${n.author_email}</div>` : ''}
                         ${n.comment_preview ? `<div class="small fst-italic text-truncate">${n.comment_preview}</div>` : ''}
+                        ${n.type === 'deadline' && n.due_at ? `<div class="small text-danger">Срок: ${new Date(n.due_at).toLocaleString('ru-RU')}</div>` : ''}
                     `;
                     div.addEventListener('click', async () => {
                         if (!n.is_read) {
@@ -1206,6 +1207,15 @@
 
         loadNotifications();
         setInterval(loadNotifications, 30000);
+
+        // Push через WebSocket: не ждём следующего опроса, если пришло уведомление
+        // (например, о приближающемся дедлайне из Celery-задачи).
+        (function () {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            const ws = new WebSocket(`${proto}://${location.host}/ws/notifications/`);
+            ws.onmessage = () => loadNotifications();
+            ws.onerror = () => {};
+        })();
     })();
 </script>
 

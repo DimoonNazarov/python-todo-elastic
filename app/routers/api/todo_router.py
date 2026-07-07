@@ -519,6 +519,7 @@ async def edit_todo(
     image_path: str = Form(None),
     existing_image: str = Form(None),
     image: UploadFile = File(None),
+    due_at: datetime | None = Form(None),
     attached_file: UploadFile = File(None),
     remove_file: bool = Form(False),
 ):
@@ -536,6 +537,7 @@ async def edit_todo(
         image_path=image_path,
         existing_image=existing_image,
         image=image,
+        due_at=due_at,
         attached_file=attached_file,
         remove_file=remove_file,
     )

@@ -15,4 +15,4 @@ COPY pyproject.toml /code/pyproject.toml
 COPY migrations /code/migrations
 WORKDIR /code/
 
-RUN chmod a+x /code/docker_scripts/app.sh
+RUN chmod a+x /code/docker_scripts/app.sh /code/docker_scripts/celery_worker.sh /code/docker_scripts/celery_beat.sh
