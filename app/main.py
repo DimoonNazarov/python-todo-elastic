@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 from app.config import settings
 from app.core import setup_service_logging
 from app.core.database import get_es_client
+from app.services.notification_bus import listen_for_notifications
 from app.exceptions import (
     NotFoundException,
     InvalidPageException,
@@ -61,13 +62,18 @@ async def lifespan(app: FastAPI):
     repo = ElasticRepository(es)
     await repo.ensure_index_exists()
     await repo.ensure_file_content_field()
-
+    
     # Поллинг Telegram-бота (привязка чатов через /start <код>)
     telegram_task = None
     if settings.TELEGRAM_BOT_TOKEN:
         telegram_task = asyncio.create_task(run_telegram_polling())
+        
+    # Фоновая подписка на Redis Pub/Sub: доставляет уведомления о дедлайнах
+    # (созданные Celery-воркером в отдельном процессе) в WebSocket этого инстанса
+    notifications_listener = asyncio.create_task(listen_for_notifications())
 
     yield
+
     # При остановке
     if telegram_task is not None:
         telegram_task.cancel()
@@ -76,6 +82,7 @@ async def lifespan(app: FastAPI):
 
     from app.core.database import close_es_client
 
+    notifications_listener.cancel()
     await close_es_client()
 
 

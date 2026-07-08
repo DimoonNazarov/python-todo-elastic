@@ -8,7 +8,8 @@ from app.routers.dependencies import get_current_active_user
 from app.schemas.comment import CommentCreate, CommentResponse, NotificationResponse
 from app.schemas.user import SUserInfo
 from app.services.comment import CommentService
-from app.services.websocket_manager import manager, TODOS_FEED_CHANNEL
+from app.services.websocket_manager import manager, TODOS_FEED_CHANNEL, user_manager
+from app.utils import extract_bearer_token, verify_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -129,3 +130,21 @@ async def websocket_todos_feed(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(TODOS_FEED_CHANNEL, websocket)
+
+
+@comment_router.websocket("/ws/notifications/")
+async def websocket_notifications(websocket: WebSocket):
+    """Личный канал пользователя: push уведомлений (упоминания, ответы, дедлайны)."""
+    token = extract_bearer_token(websocket.cookies.get("access_token"))
+    payload = verify_access_token(token) if token else None
+    if payload is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    user_id = int(payload["user_id"])
+    await user_manager.connect(user_id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        user_manager.disconnect(user_id, websocket)

@@ -30,6 +30,16 @@ class Settings(BaseSettings):
     TELEGRAM_TIMEOUT_SECONDS: int = 30
     TELEGRAM_LINK_TTL_MINUTES: int = 15
 
+    REDIS_HOST: str = "redis"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+
+    # За сколько минут до дедлайна отправлять напоминание
+    DEADLINE_REMINDER_BEFORE_MINUTES: int = 2
+    # Как часто Celery beat запускает проверку дедлайнов
+    DEADLINE_REMINDER_CHECK_INTERVAL_SECONDS: int = 60
+
+
     # model_config = SettingsConfigDict(
     #     env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"),
     #     extra="allow",
@@ -44,6 +54,10 @@ class Settings(BaseSettings):
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@"
             f"{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
+
+    @property
+    def REDIS_URL(self) -> str:
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
 
 settings = Settings()

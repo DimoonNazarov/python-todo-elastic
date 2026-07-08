@@ -13,8 +13,8 @@ class Notification(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     recipient_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     todo_id: Mapped[int] = mapped_column(ForeignKey("todos.id"), nullable=False)
-    comment_id: Mapped[int] = mapped_column(ForeignKey("comments.id"), nullable=False)
-    type: Mapped[str] = mapped_column(String(20), nullable=False)  # "mention" | "reply"
+    comment_id: Mapped[int | None] = mapped_column(ForeignKey("comments.id"), nullable=True)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)  # "mention" | "reply" | "deadline"
     is_read: Mapped[bool] = mapped_column(default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

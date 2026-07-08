@@ -36,6 +36,7 @@ class Todo(Base):
     due_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    reminder_sent: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     source: Mapped[str] = mapped_column(nullable=False, default=TodoSource.created)
     image_path: Mapped[str | None] = mapped_column(nullable=True, default=None)

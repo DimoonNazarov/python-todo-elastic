@@ -148,4 +148,5 @@ class CommentService:
             todo_title=n.todo.title if n.todo else None,
             comment_preview=(n.comment.content[:100] if n.comment and not n.comment.is_deleted else None),
             author_email=(n.comment.author.email if n.comment and n.comment.author else None),
+            due_at=n.todo.due_at if n.todo else None,
         )
