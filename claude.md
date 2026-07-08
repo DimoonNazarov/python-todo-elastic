@@ -47,6 +47,7 @@
 app/
 ├── main.py                 # Точка входа, настройка FastAPI
 ├── config.py              # Настройки через Pydantic Settings
+├── constants.py           # Константы приложения
 ├── core/                  # Ядро приложения
 │   ├── database.py        # Подключение к PostgreSQL и Elasticsearch
 │   ├── uow.py            # Unit of Work паттерн
@@ -74,20 +75,24 @@ app/
 │   ├── todo.py         # TodoService - основная логика задач
 │   ├── auth.py         # AuthService - аутентификация
 │   ├── search_index.py # Индексирование в ES, поиск
+│   ├── search.py       # Поисковые сервисы
 │   ├── summary.py      # Суммаризация (spacy + LLM)
 │   ├── clustering.py   # KMeans кластеризация
 │   ├── openrouter.py   # Интеграция с LLM API
 │   ├── comment.py      # CommentService - комментарии и их уведомления
 │   ├── reminder.py     # ReminderService - напоминания о дедлайнах (для Celery)
 │   ├── notification_bus.py  # Redis Pub/Sub мост Celery-воркер -> WebSocket FastAPI
-│   └── websocket_manager.py  # ConnectionManager (комнаты по todo_id и по user_id)
+│   ├── websocket_manager.py  # ConnectionManager (комнаты по todo_id и по user_id)
+│   ├── telegram.py     # Telegram Bot API: отправка заметок, коды привязки
+│   └── telegram_polling.py  # Фоновый getUpdates-поллинг (/start <код>)
 ├── tasks/               # Celery-задачи
 │   └── reminders.py     # check_due_reminders — периодическая проверка дедлайнов
 ├── routers/            # HTTP endpoints (FastAPI роутеры)
 │   ├── api/
 │   │   ├── todo_router.py     # /todo/* endpoints
 │   │   ├── auth_router.py     # /auth/* endpoints
-│   │   └── comment_router.py  # /todo/{id}/comments/*, /api/notifications/*, /ws/*
+│   │   ├── comment_router.py  # /todo/{id}/comments/*, /api/notifications/*, /ws/*
+│   │   └── telegram_router.py # /telegram/* endpoints (из tg_bot)
 │   ├── dependencies.py      # JWT auth dependencies
 │   └── exception_handlers.py
 ├── middleware/
@@ -95,9 +100,34 @@ app/
 ├── utils/              # Вспомогательные функции
 │   ├── jwt_utils.py    # Работа с JWT
 │   ├── security.py     # Хеширование паролей
+│   ├── file_extract.py # Извлечение данных из файлов
 │   └── utils.py        # Общие утилиты
 ├── static/             # CSS, JS
-└── templates/          # Jinja2 HTML шаблоны
+│   ├── css/
+│   │   ├── auth.css
+│   │   └── bootstrap.min.css
+│   └── js/
+│       ├── auth.js
+│       └── modal.js
+├── templates/          # Jinja2 HTML шаблоны
+│   ├── base.html
+│   ├── login.html
+│   ├── register.html
+│   ├── index.html
+│   ├── todos.html
+│   ├── edit.html
+│   ├── clusters.html
+│   ├── duplicates.html
+│   ├── export.html
+│   ├── generate.html
+│   ├── import-log.html
+│   ├── info-tasks.html
+│   ├── notes_per_day.html
+│   ├── tags.html
+│   ├── visualization.html
+│   └── 401.html
+├── dependencies.py      # JWT auth dependencies
+└── exceptions.py        # Кастомные исключения
 ```
 
 ### Паттерны
@@ -126,6 +156,7 @@ app/
 - last_name: str
 - role: UserRole (ADMIN, EDITOR, VIEWER)
 - is_active: bool
+- telegram_chat_id: int | None  # привязанный Telegram-чат (BigInteger)
 - created_at: datetime
 - updated_at: datetime
 # Relationships:
@@ -255,7 +286,40 @@ app/
   - **VIEWER** - только просмотр (была удалена в миграции)
 - Middleware для проверки JWT в cookies
 
-### 6. Импорт/экспорт (app/utils/utils.py + todo_router.py)
+### 6. Сохранение заметок в Telegram
+- Кнопка «В Telegram» в карточке задачи на странице списка (todos.html, макрос
+  `todo_item`, класс `sendTelegramButton`)
+- Привязка чата: `GET /telegram/link/` выдаёт deep-link `t.me/<bot>?start=<код>`;
+  код — компактный HMAC (`user_id_expires_подпись`, ≤64 символов — лимит Telegram
+  на start-параметр, JWT не влезает), подписан `JWT_SECRET_KEY`, TTL из
+  `TELEGRAM_LINK_TTL_MINUTES`
+- Фоновый поллинг `getUpdates` (запускается в lifespan, только если задан
+  `TELEGRAM_BOT_TOKEN`) ловит `/start <код>` и сохраняет `chat_id` в `users.telegram_chat_id`
+- Команда бота `/tasks`: inline-клавиатура с активными пользователями
+  (callback_data `tasks:<user_id>`), по нажатию — карточки невыполненных задач
+  выбранного пользователя (`TodoRepository.get_pending_todos_by_author_id`,
+  сортировка по due_at, максимум 10 карточек). Карточка: заголовок, реферат
+  (llm/spacy) или укороченный текст, тег, срок, статус + кнопка
+  «✅ Отметить выполненной» (callback_data `done:<todo_id>`)
+- Подтверждение выполнения из бота идёт через `TodoService.update` от имени
+  владельца чата: те же права (автор или админ), история изменений и синхронизация
+  с Elasticsearch, что и в приложении; карточка редактируется через
+  `editMessageText`: статус «Выполнена», кнопка меняется на индикатор
+  «🎉 Задача выполнена» (callback_data `noop`). Доступно только из привязанных
+  чатов; один чат привязан ровно к одному аккаунту (при `/start` привязка
+  с других снимается)
+- Живое обновление списка задач: при выполнении из бота событие
+  `{"type": "todo_completed", ...}` рассылается в WebSocket-канал `/ws/todos/`
+  (`TODOS_FEED_CHANNEL = 0` в websocket_manager), страница todos.html помечает
+  карточку выполненной без перезагрузки
+- Отправка: `POST /telegram/send/{todo_id}/` — форматирует заметку (заголовок, описание,
+  рефераты spaCy/LLM при наличии, тег, срок, статус; HTML parse_mode, экранирование)
+  и шлёт через `sendMessage`
+- Исключения: `TelegramConfigurationException` (503), `TelegramServiceException` (502),
+  `TelegramNotLinkedException` (400 — фронт в ответ показывает ссылку привязки)
+- Юнит-тесты: `tests/test_telegram.py` (коды привязки, формат сообщения; без сети)
+
+### 7. Импорт/экспорт (app/utils/utils.py + todo_router.py)
 - **Экспорт** (`export_todos`): Todo ORM → Excel (15 колонок)
 - **Импорт** (`import_todos`): Excel → `list[dict]`, роутер создаёт ORM с `author_id`
 - 15 колонок Excel: `title, details, completed, tag, created_at, completed_at, due_at, updated_at, updated_by, source, spacy_summary, llm_summary, image_path, image_hash, details_hash`
@@ -422,6 +486,11 @@ Celery-воркер работает в отдельном процессе/ко
 - POST `/todo/summarize/{id}` - суммаризация задачи
 - GET `/todo/suggest-tags/{id}` - предложение тегов
 
+### Telegram
+- GET `/telegram/link/` - статус привязки + deep-link для подключения чата
+- POST `/telegram/unlink/` - отвязать чат
+- POST `/telegram/send/{todo_id}/` - отправить заметку в привязанный чат
+
 ### Комментарии и уведомления
 - GET/POST `/todo/{todo_id}/comments/` - список / создание комментария
 - DELETE `/todo/{todo_id}/comments/{comment_id}/` - soft delete
@@ -429,6 +498,7 @@ Celery-воркер работает в отдельном процессе/ко
 - POST `/api/notifications/{id}/read/`, POST `/api/notifications/read-all/`
 - WS `/ws/todo/{todo_id}/` - реалтайм комментариев
 - WS `/ws/notifications/` - личный канал (mention/reply/deadline), авторизация по cookie `access_token`
+
 
 ## Тестирование
 
@@ -572,12 +642,21 @@ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_MODEL=openrouter/free
 OPENROUTER_TIMEOUT_SECONDS=60
 
+
+# Telegram (сохранение заметок в бота)
+TELEGRAM_BOT_TOKEN=  # токен от @BotFather; пусто = функция выключена
+TELEGRAM_BOT_USERNAME=  # опционально, иначе берётся через getMe
+TELEGRAM_LINK_TTL_MINUTES=15
+# env_file читается при создании контейнера — после изменения токена
+# нужен `docker compose up -d web` (hot reload кода это не подхватит)
+
 # Redis / Celery (напоминания о дедлайнах)
 REDIS_HOST=redis
 REDIS_PORT=6379
 REDIS_DB=0
 DEADLINE_REMINDER_BEFORE_MINUTES=60
 DEADLINE_REMINDER_CHECK_INTERVAL_SECONDS=60
+
 ```
 
 ## Учебный контекст (из LR.md)

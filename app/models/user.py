@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, Boolean, DateTime, Enum
+from sqlalchemy import String, Integer, BigInteger, Boolean, DateTime, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from typing import Optional
@@ -26,6 +26,7 @@ class User(Base):
         Enum(UserRole), default=UserRole.EDITOR, nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    telegram_chat_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

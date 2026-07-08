@@ -15,6 +15,9 @@ from app.exceptions import (
     LLMServiceException,
     UserAlreadyExists,
     SearchSyncException,
+    TelegramConfigurationException,
+    TelegramServiceException,
+    TelegramNotLinkedException,
 )
 from app.schemas import UserRole
 
@@ -126,5 +129,33 @@ async def search_sync_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, SearchSyncException)
     return JSONResponse(
         status_code=status.HTTP_502_BAD_GATEWAY,
+        content={"detail": str(exc)},
+    )
+
+
+async def telegram_configuration_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    assert isinstance(exc, TelegramConfigurationException)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": str(exc)},
+    )
+
+
+async def telegram_service_handler(request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, TelegramServiceException)
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        content={"detail": str(exc)},
+    )
+
+
+async def telegram_not_linked_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    assert isinstance(exc, TelegramNotLinkedException)
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
         content={"detail": str(exc)},
     )

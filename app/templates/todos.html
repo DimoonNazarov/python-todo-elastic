@@ -272,6 +272,9 @@
     </div>
 
     <div class="btn-group flex-shrink-0">
+        <button class="btn btn-outline-primary sendTelegramButton" type="button"
+                data-todo-id="{{ todo.id }}"
+                title="Отправить задачу в Telegram">В Telegram</button>
         <a class="btn btn-success"
            href="/todo/edit/{{ todo.id }}/?limit={{ limit }}&skip={{ page }}"
            data-todo-id="{{ todo.id }}"
@@ -385,13 +388,17 @@
     const todoActionMessage = document.getElementById('todoActionMessage');
     let todoActionMessageTimer = null;
 
-    function showTodoActionMessage(text, kind = 'success') {
+    function showTodoActionMessage(text, kind = 'success', asHtml = false) {
         if (todoActionMessageTimer) {
             clearTimeout(todoActionMessageTimer);
         }
 
         todoActionMessage.className = `alert alert-${kind} mt-2`;
-        todoActionMessage.textContent = text;
+        if (asHtml) {
+            todoActionMessage.innerHTML = text;
+        } else {
+            todoActionMessage.textContent = text;
+        }
         todoActionMessage.classList.remove('d-none');
 
         todoActionMessageTimer = setTimeout(() => {
@@ -491,6 +498,79 @@
                     .catch(error => showTodoActionMessage(error.message || 'Не удалось удалить задачу.', 'danger'))
             };
             closeShowModal(action, `Вы уверены, что хотите удалить "${todoTitle}"?`)
+        });
+    });
+
+    // Живое обновление списка: задача выполнена из Telegram-бота
+    function markTodoCompletedInPlace(todoId, completedBy) {
+        const checkbox = document.querySelector(`.completedTask[data-todo-id="${todoId}"]`);
+        if (!checkbox) {
+            return; // задачи нет на текущей странице списка
+        }
+        checkbox.checked = true;
+
+        const item = checkbox.closest('li');
+        const titleEl = item?.querySelector('.flex-grow-1 > span, .flex-grow-1 > strike');
+        if (titleEl && titleEl.tagName !== 'STRIKE') {
+            const strike = document.createElement('strike');
+            strike.className = titleEl.className;
+            strike.setAttribute('style', titleEl.getAttribute('style') || '');
+            strike.textContent = titleEl.textContent;
+            titleEl.replaceWith(strike);
+        }
+
+        const title = checkbox.dataset.todoTitle || `#${todoId}`;
+        showTodoActionMessage(`Задача "${title}" отмечена выполненной через Telegram (${completedBy}).`);
+    }
+
+    (function connectTodosFeed() {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(`${proto}://${location.host}/ws/todos/`);
+        ws.onmessage = (e) => {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'todo_completed') {
+                markTodoCompletedInPlace(msg.todo_id, msg.completed_by || 'бот');
+            }
+        };
+        ws.onerror = () => {};
+        ws.onclose = () => setTimeout(connectTodosFeed, 5000);
+    })();
+
+    document.querySelectorAll('.sendTelegramButton').forEach(button => {
+        button.addEventListener('click', async function () {
+            const todoId = this.dataset.todoId;
+            this.disabled = true;
+
+            try {
+                const response = await fetchWithAuth(`/telegram/send/${todoId}/`, {method: 'POST'});
+                const data = await response.json();
+
+                if (!response.ok) {
+                    if (response.status === 400) {
+                        // Telegram не привязан — показываем ссылку привязки
+                        const linkResponse = await fetchWithAuth('/telegram/link/');
+                        const linkData = await linkResponse.json();
+                        if (linkResponse.ok && linkData.link_url) {
+                            showTodoActionMessage(
+                                'Telegram не привязан к аккаунту. ' +
+                                `<a href="${linkData.link_url}" target="_blank" rel="noopener">Привязать Telegram</a> ` +
+                                '(откройте ссылку и нажмите Start), затем повторите отправку.',
+                                'warning',
+                                true
+                            );
+                            return;
+                        }
+                        throw new Error(linkData.detail || data.detail || 'Не удалось получить ссылку привязки Telegram.');
+                    }
+                    throw new Error(data.detail || 'Не удалось отправить задачу в Telegram.');
+                }
+
+                showTodoActionMessage('Задача сохранена в Telegram.');
+            } catch (error) {
+                showTodoActionMessage(error.message || 'Не удалось отправить задачу в Telegram.', 'danger');
+            } finally {
+                this.disabled = false;
+            }
         });
     });
 

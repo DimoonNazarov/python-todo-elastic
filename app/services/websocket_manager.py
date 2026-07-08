@@ -3,6 +3,9 @@ from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
 
+# Зарезервированный канал для страницы списка задач (реальные todo_id начинаются с 1)
+TODOS_FEED_CHANNEL = 0
+
 
 class ConnectionManager:
     """Держит WebSocket-подключения, сгруппированные по произвольному int-ключу
