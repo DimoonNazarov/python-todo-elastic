@@ -254,7 +254,8 @@
             <div style="color: dodgerblue" class="small">{{ todo.source }}</div>
             {% if todo.due_at %}
             <div class="small text-secondary">
-                <span class="me-1">&#x1F551;</span>{{ todo.due_at.strftime('%H:%M') if todo.due_at.strftime else todo.due_at }}
+                <span class="me-1">&#x1F551;</span><span class="due-at-time"
+                    data-due-at-utc="{{ todo.due_at.isoformat() if todo.due_at.isoformat else todo.due_at }}">{{ todo.due_at.strftime('%H:%M') if todo.due_at.strftime else todo.due_at }}</span>
             </div>
             {% endif %}
         </div>
@@ -422,6 +423,17 @@
                 sessionStorage.removeItem('todoActionMessage');
             }
         }
+    });
+
+    // due_at хранится в БД как UTC — переводим в локальное время браузера.
+    document.addEventListener('DOMContentLoaded', function() {
+        const pad = n => String(n).padStart(2, '0');
+        document.querySelectorAll('.due-at-time[data-due-at-utc]').forEach(el => {
+            const d = new Date(el.dataset.dueAtUtc);
+            if (!isNaN(d)) {
+                el.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            }
+        });
     });
 
     document.addEventListener('DOMContentLoaded', function() {
