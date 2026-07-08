@@ -359,7 +359,8 @@
         formData.delete('due_time');
         if (dateVal) {
             const time = timeVal || '00:00';
-            formData.append('due_at', `${dateVal}T${time}:00`);
+            const localDue = new Date(`${dateVal}T${time}:00`);
+            formData.append('due_at', localDue.toISOString());
         }
 
         const initialSubmitButtonText = submitButton.textContent;

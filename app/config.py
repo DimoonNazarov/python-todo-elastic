@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
 
     # За сколько минут до дедлайна отправлять напоминание
-    DEADLINE_REMINDER_BEFORE_MINUTES: int = 60
+    DEADLINE_REMINDER_BEFORE_MINUTES: int = 2
     # Как часто Celery beat запускает проверку дедлайнов
     DEADLINE_REMINDER_CHECK_INTERVAL_SECONDS: int = 60
 
