@@ -63,6 +63,13 @@
     </div>
 
     <div class="form-group">
+        <label for="due_at">Дедлайн (срок выполнения):</label>
+        <input type="datetime-local" class="form-control" id="due_at" name="due_at"
+               data-due-at-utc="{{ todo.due_at.isoformat() if todo.due_at else '' }}">
+        <div class="form-text text-muted">Уведомление придёт заранее через WebSocket, если срок приближается.</div>
+    </div>
+
+    <div class="form-group">
         <label>Последнее редактирование:</label>
         <input type="text" class="form-control"
            value="{% if todo.updated_at %}{{ todo.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}Ещё не редактировалась{% endif %}"
@@ -476,6 +483,15 @@
     const todoForm = document.getElementById('todoForm');
     const saveButton = todoForm.querySelector('button[type="submit"]');
 
+    // due_at хранится в БД как UTC (timestamptz). Переводим его в локальное
+    // время браузера, чтобы показать в datetime-local поле корректно.
+    const dueAtInput = document.getElementById('due_at');
+    if (dueAtInput.dataset.dueAtUtc) {
+        const d = new Date(dueAtInput.dataset.dueAtUtc);
+        const pad = n => String(n).padStart(2, '0');
+        dueAtInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
     todoForm.addEventListener('submit', async function (e) {
         e.preventDefault();
 
@@ -488,6 +504,13 @@
         }
 
         const formData = new FormData(this);
+        if (formData.get('due_at')) {
+            // Поле datetime-local отдаёт локальное время без смещения —
+            // переводим его в UTC перед отправкой на бэкенд.
+            formData.set('due_at', new Date(formData.get('due_at')).toISOString());
+        } else {
+            formData.delete('due_at');
+        }
         const initialSaveButtonText = saveButton.textContent;
         saveButton.disabled = true;
         saveButton.textContent = 'Сохраняем...';

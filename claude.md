@@ -37,6 +37,7 @@
 - **Docker & Docker Compose** - контейнеризация
 - **pytest 8.3.3** - тестирование
 - **GitHub Actions** - CI/CD (`.github/workflows/ci.yml`)
+- **Celery 5.4.0 + Redis 7** - отложенные задачи (напоминания о дедлайнах), брокер и Pub/Sub
 
 ## Архитектура приложения
 
@@ -49,19 +50,25 @@ app/
 ├── core/                  # Ядро приложения
 │   ├── database.py        # Подключение к PostgreSQL и Elasticsearch
 │   ├── uow.py            # Unit of Work паттерн
+│   ├── celery_app.py     # Настройка Celery (брокер/backend Redis, beat_schedule)
 │   └── logging_config.py  # Loguru настройка
 ├── models/               # SQLAlchemy модели (БД слой)
 │   ├── user.py          # User, UserRole
-│   ├── todo.py          # Todo
+│   ├── todo.py          # Todo (включая due_at, reminder_sent)
 │   ├── todo_edit_history.py
+│   ├── comment.py       # Comment (с ответами через parent_id)
+│   ├── notification.py  # Notification (mention/reply/deadline)
 │   └── refresh_token.py
 ├── schemas/             # Pydantic схемы (валидация)
 │   ├── schemas.py       # TodoSource, SUserInfo и др.
+│   ├── comment.py       # CommentCreate/Response, NotificationResponse
 │   └── user.py
 ├── repository/          # Слой доступа к данным
 │   ├── todo_repository.py      # CRUD для Todo (PostgreSQL)
 │   ├── elastic_repository.py   # Работа с Elasticsearch
 │   ├── auth_repository.py      # Работа с User
+│   ├── comment_repository.py   # CRUD для Comment
+│   ├── notification_repository.py  # CRUD для Notification
 │   └── token_repository.py     # Refresh токены
 ├── services/            # Бизнес-логика
 │   ├── todo.py         # TodoService - основная логика задач
@@ -69,11 +76,18 @@ app/
 │   ├── search_index.py # Индексирование в ES, поиск
 │   ├── summary.py      # Суммаризация (spacy + LLM)
 │   ├── clustering.py   # KMeans кластеризация
-│   └── openrouter.py   # Интеграция с LLM API
+│   ├── openrouter.py   # Интеграция с LLM API
+│   ├── comment.py      # CommentService - комментарии и их уведомления
+│   ├── reminder.py     # ReminderService - напоминания о дедлайнах (для Celery)
+│   ├── notification_bus.py  # Redis Pub/Sub мост Celery-воркер -> WebSocket FastAPI
+│   └── websocket_manager.py  # ConnectionManager (комнаты по todo_id и по user_id)
+├── tasks/               # Celery-задачи
+│   └── reminders.py     # check_due_reminders — периодическая проверка дедлайнов
 ├── routers/            # HTTP endpoints (FastAPI роутеры)
 │   ├── api/
-│   │   ├── todo_router.py  # /todo/* endpoints
-│   │   └── auth_router.py  # /auth/* endpoints
+│   │   ├── todo_router.py     # /todo/* endpoints
+│   │   ├── auth_router.py     # /auth/* endpoints
+│   │   └── comment_router.py  # /todo/{id}/comments/*, /api/notifications/*, /ws/*
 │   ├── dependencies.py      # JWT auth dependencies
 │   └── exception_handlers.py
 ├── middleware/
@@ -133,7 +147,8 @@ app/
 - completed_at: datetime | None
 - updated_at: datetime | None
 - updated_by: int | None (FK -> users.id)
-- due_at: datetime | None
+- due_at: datetime | None  # дедлайн, редактируется при создании и в форме edit.html
+- reminder_sent: bool  # сброшен в False при любом изменении due_at (см. TodoService.update)
 - source: str (created/imported/edited)
 - image_path: str | None
 - image_hash: str | None  # для поиска дубликатов
@@ -162,6 +177,29 @@ app/
 - token: str (unique)
 - device_info: str
 - expires_at: datetime
+- created_at: datetime
+```
+
+### Comment (PostgreSQL)
+```python
+- id: int (PK)
+- todo_id: int (FK -> todos.id)
+- author_id: int (FK -> users.id)
+- parent_id: int | None (FK -> comments.id)  # для ответов на комментарии
+- content: str
+- created_at: datetime
+- updated_at: datetime | None
+- is_deleted: bool  # soft delete
+```
+
+### Notification (PostgreSQL)
+```python
+- id: int (PK)
+- recipient_id: int (FK -> users.id)
+- todo_id: int (FK -> todos.id)
+- comment_id: int | None (FK -> comments.id)  # None для type="deadline"
+- type: str  # "mention" | "reply" | "deadline"
+- is_read: bool
 - created_at: datetime
 ```
 
@@ -226,6 +264,22 @@ app/
 - Endpoint импорта: `POST /todo/import` → JSON `{"status":"success",...}` (не redirect)
 - Генерация случайных TODO: `POST /todo/generate/` или скрипт `generate_todos.py`
 
+### 7. Комментарии и упоминания
+- Комментарии к задаче с ответами (`parent_id`), soft delete
+- `@email` в тексте комментария → уведомление упомянутому пользователю
+- Ответ на комментарий → уведомление автору родительского комментария
+- Реалтайм через WebSocket `/ws/todo/{todo_id}/` (новый/удалённый комментарий)
+
+### 8. Напоминания о дедлайнах
+- Дедлайн (`due_at`) задаётся при создании и редактируется в `edit.html`
+- Celery beat каждые `DEADLINE_REMINDER_CHECK_INTERVAL_SECONDS` (по умолчанию 60 сек)
+  запускает `reminders.check_due_reminders`, который ищет незавершённые задачи
+  с `due_at` в пределах ближайших `DEADLINE_REMINDER_BEFORE_MINUTES` минут (по умолчанию 60)
+  и ещё не уведомлённые (`reminder_sent=False`)
+- Для каждой находит создаётся `Notification(type="deadline")`, `reminder_sent` ставится в `True`
+- Изменение `due_at` в `TodoService.update()` сбрасывает `reminder_sent` обратно в `False`
+- Доставка на фронт — только через WebSocket, без Telegram (см. раздел ниже)
+
 ## Ключевые файлы
 
 ### Конфигурация
@@ -246,16 +300,28 @@ app/
 - `app/services/summary.py` - суммаризация текста
 - `app/services/clustering.py` - кластеризация задач
 - `app/services/openrouter.py` - работа с LLM API
+- `app/services/comment.py` - комментарии, @mention/reply уведомления
+- `app/services/reminder.py` - `ReminderService.notify_due_soon()`, вызывается из Celery-задачи
+- `app/services/notification_bus.py` - Redis Pub/Sub мост Celery-воркер → WebSocket FastAPI
+- `app/services/websocket_manager.py` - `ConnectionManager` (`manager` для комнат todo, `user_manager` для личных уведомлений)
 
 ### Репозитории
-- `app/repository/todo_repository.py` - CRUD для Todo (PostgreSQL)
+- `app/repository/todo_repository.py` - CRUD для Todo (PostgreSQL), включая `get_todos_due_soon`/`mark_reminder_sent`
 - `app/repository/elastic_repository.py` (~600 строк) - все операции с ES
 - `app/repository/auth_repository.py` - работа с User
+- `app/repository/comment_repository.py` - CRUD для Comment
+- `app/repository/notification_repository.py` - CRUD для Notification
 - `app/repository/token_repository.py` - refresh токены
 
 ### Роутеры
 - `app/routers/api/todo_router.py` - все endpoints для задач
 - `app/routers/api/auth_router.py` - регистрация, вход, выход
+- `app/routers/api/comment_router.py` - комментарии, `/api/notifications/*`, `/ws/todo/{id}/`, `/ws/notifications/`
+
+### Celery
+- `app/core/celery_app.py` - инстанс Celery (broker/backend = Redis), `beat_schedule`
+- `app/tasks/reminders.py` - задача `reminders.check_due_reminders` (регистрируется через `include=` в celery_app)
+- `docker_scripts/celery_worker.sh`, `docker_scripts/celery_beat.sh` - точки входа контейнеров
 
 ## Важные концепты
 
@@ -302,6 +368,39 @@ async with uow_session.start():
 - При обновлении: обновление в PostgreSQL + реиндексация в ES
 - При удалении: удаление из обеих БД
 
+### Напоминания о дедлайнах: Celery → Redis Pub/Sub → WebSocket
+Celery-воркер работает в отдельном процессе/контейнере и не имеет доступа
+к in-memory `ConnectionManager` внутри процесса FastAPI, поэтому события
+передаются через Redis Pub/Sub, а не напрямую:
+
+```
+[celery beat]  каждые DEADLINE_REMINDER_CHECK_INTERVAL_SECONDS
+      │  отправляет task "reminders.check_due_reminders"
+      ▼
+[celery worker]  app/tasks/reminders.py: check_due_reminders()
+      │  1. asyncio.run(...) → ReminderService.notify_due_soon(uow, before_minutes=...)
+      │     - TodoRepository.get_todos_due_soon(now, threshold): due_at в пределах
+      │       DEADLINE_REMINDER_BEFORE_MINUTES, completed=False, reminder_sent=False
+      │     - создаёт Notification(type="deadline"), TodoRepository.mark_reminder_sent()
+      │  2. publish_notification_sync(payload) → Redis PUBLISH "ws:notifications"
+      ▼
+[Redis Pub/Sub канал "ws:notifications"]
+      ▼
+[FastAPI процесс]  app/services/notification_bus.listen_for_notifications()
+      │  фоновая asyncio-задача, запущена в lifespan (app/main.py)
+      │  SUBSCRIBE "ws:notifications" → на каждое сообщение:
+      │  user_manager.broadcast(recipient_id, {"type": "deadline", ...})
+      ▼
+[Браузер]  WebSocket /ws/notifications/ (base.html) → loadNotifications() обновляет колокольчик
+```
+
+- `/ws/notifications/` аутентифицирует по cookie `access_token` (тот же формат
+  `"Bearer <jwt>"`, что и HTTP-middleware), закрывает соединение с
+  `WS_1008_POLICY_VIOLATION`, если токен невалиден
+- Изменение `due_at` в `TodoService.update()` сбрасывает `reminder_sent=False`,
+  иначе задача с новым сроком не попадёт повторно в `get_todos_due_soon`
+- Telegram сознательно не используется — только WebSocket, по требованию задачи
+
 ## Endpoints (основные)
 
 ### Auth
@@ -322,6 +421,14 @@ async with uow_session.start():
 - POST `/todo/generate/` - генерация N случайных задач
 - POST `/todo/summarize/{id}` - суммаризация задачи
 - GET `/todo/suggest-tags/{id}` - предложение тегов
+
+### Комментарии и уведомления
+- GET/POST `/todo/{todo_id}/comments/` - список / создание комментария
+- DELETE `/todo/{todo_id}/comments/{comment_id}/` - soft delete
+- GET `/api/notifications/`, GET `/api/notifications/count/` - список / счётчик непрочитанных
+- POST `/api/notifications/{id}/read/`, POST `/api/notifications/read-all/`
+- WS `/ws/todo/{todo_id}/` - реалтайм комментариев
+- WS `/ws/notifications/` - личный канал (mention/reply/deadline), авторизация по cookie `access_token`
 
 ## Тестирование
 
@@ -361,6 +468,9 @@ curl http://localhost:9200/_cat/shards/todos_index?v
 2. **web** (FastAPI app) - порт 8000
 3. **elasticsearch** - порты 9200, 9300
 4. **kibana** - порт 5601
+5. **redis** (redis:7-alpine) - порт 6379 — брокер/backend Celery и Pub/Sub для WebSocket-уведомлений
+6. **celery_worker** - выполняет задачу `reminders.check_due_reminders`
+7. **celery_beat** - планировщик, шлёт задачу каждые `DEADLINE_REMINDER_CHECK_INTERVAL_SECONDS`
 
 ### Volumes
 - `postgres_data_8` - данные PostgreSQL
@@ -374,6 +484,8 @@ curl http://localhost:9200/_cat/shards/todos_index?v
 ## Скрипты
 
 - `docker_scripts/app.sh` - запуск uvicorn в контейнере
+- `docker_scripts/celery_worker.sh` - запуск Celery worker
+- `docker_scripts/celery_beat.sh` - запуск Celery beat (планировщик)
 - `scripts/generate_todos.py` - генерация тестовых данных (20 TODO)
 - `scripts/demo_cluster.sh` - демонстрация работы кластера ES
 
@@ -400,6 +512,9 @@ alembic downgrade -1
 - `796573c30868` - новые таблицы (TodoEditHistory, RefreshToken)
 - `7b7f031af7af` - связь todos с user
 - `881c1dc3854d` - удалена роль VIEWER
+- `e2f3a4b5c6d7` - таблицы Comment и Notification
+- `f3a4b5c6d7e8` - добавлен file_path в todo_edit_history
+- `a1b2c3d4e5f6` - добавлен reminder_sent в todos, comment_id в notifications стал nullable
 
 ## Тестирование через curl/python
 
@@ -432,6 +547,8 @@ conn = psycopg2.connect(host='localhost', port=5433, dbname='python_ddz',
 7. **create_dirs()** в `app/utils/utils.py` создаёт `data/`, `images/`, `files/` при старте
 8. **Фронтенд** вызывает API через `fetchWithAuth` (AJAX) — endpoints должны возвращать JSON, не RedirectResponse
 9. **Exceptions**: `app/exceptions.py` — `AppException`, `SearchSyncException` и др.
+10. **Celery-воркер не шарит память с FastAPI** — доставка WebSocket-уведомлений из Celery-задачи идёт только через Redis Pub/Sub (`app/services/notification_bus.py`), напрямую вызвать `ConnectionManager.broadcast` из таска нельзя
+11. **`UnitOfWork(async_session_maker, es_client=None)`** — так создаётся UoW внутри Celery-задачи, т.к. Elasticsearch там не нужен и `AsyncElasticsearch` нельзя переиспользовать между вызовами `asyncio.run()` (разные event loop'ы)
 
 ## Переменные окружения (.env)
 
@@ -454,6 +571,13 @@ OPENROUTER_API_KEY=sk-...
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_MODEL=openrouter/free
 OPENROUTER_TIMEOUT_SECONDS=60
+
+# Redis / Celery (напоминания о дедлайнах)
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_DB=0
+DEADLINE_REMINDER_BEFORE_MINUTES=60
+DEADLINE_REMINDER_CHECK_INTERVAL_SECONDS=60
 ```
 
 ## Учебный контекст (из LR.md)

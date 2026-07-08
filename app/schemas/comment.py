@@ -34,12 +34,13 @@ class CommentResponse(BaseModel):
 class NotificationResponse(BaseModel):
     id: int
     todo_id: int
-    comment_id: int
+    comment_id: int | None
     type: str
     is_read: bool
     created_at: datetime
     todo_title: str | None = None
     comment_preview: str | None = None
     author_email: str | None = None
+    due_at: datetime | None = None
 
     model_config = {"from_attributes": True}

@@ -406,6 +406,7 @@ class TodoService:
         image_path: str | None,
         existing_image: str | None,
         image: UploadFile | None,
+        due_at: datetime | None = None,
         attached_file: UploadFile | None = None,
         remove_file: bool = False,
     ) -> TodoORM:
@@ -447,6 +448,7 @@ class TodoService:
                     resolved_image_path != todo.image_path,
                     resolved_image_hash != todo.image_hash,
                     resolved_file_path != todo.file_path,
+                    due_at != todo.due_at,
                 ]
             )
             if not has_changes:
@@ -465,6 +467,9 @@ class TodoService:
                 spacy_summary=todo.spacy_summary,
                 llm_summary=todo.llm_summary,
                 file_path=resolved_file_path,
+                due_at=due_at,
+                # Дедлайн изменился — сбрасываем флаг, чтобы Celery снова напомнил о новом сроке
+                reminder_sent=todo.reminder_sent if due_at == todo.due_at else False,
             )
 
             if todo_change.completed:
